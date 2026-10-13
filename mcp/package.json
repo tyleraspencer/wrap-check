@@ -1,0 +1,13 @@
+{
+  "name": "wrap-check-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server that validates and renders Tesla custom wraps on a 3D model, so an LLM can check its own work.",
+  "bin": { "wrap-check-mcp": "server.js" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "playwright-core": "1.64.0",
+    "zod": "4.6.5"
+  }
+}

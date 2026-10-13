@@ -1,0 +1,23 @@
+Third-party material and attributions
+
+Wrap Check is an unofficial, independent tool. It is not affiliated with, endorsed by, or sponsored by Tesla, Inc.
+"Tesla", "Model 3", "Model Y" and "Cybertruck" are trademarks of Tesla, Inc.
+
+1. 3D viewer engine and bridge (godot/index.html, godot/index.js, godot/index.wasm, godot/index.png)
+   Taken from the public build in https://github.com/dtschannen/Tesla-Wrap-Studio (public/godot/). That project's README
+   states "License: MIT" (there is no separate LICENSE file in the repository). index.js and index.wasm are the Godot
+   Engine web runtime (https://godotengine.org, MIT License, Copyright Juan Linietsky, Ariel Manzur and Godot Engine contributors).
+
+2. Car models, shaders and scripts (the per-car .pck packs in the published site)
+   Not stored in this repository. They are generated at deploy time by tools/build_site.py from the original pack
+   published at https://lfs.tesla-wrap.com/index.pck, which appears to be derived from Tesla's in-car visualizer assets.
+   They remain the property of their owners. Wrap Check does not claim any rights to them and they are included as-is
+   (slimmed and patched) so the viewer can work.
+
+3. Wrap templates and example wraps
+   Loaded at runtime from https://github.com/teslamotors/custom-wraps. They are Tesla's and are not copied into this repository.
+
+4. The pack also contains third-party components with their own notices, such as the Noto Sans CJK font (SIL OFL 1.1) and NVIDIA's
+   FXAA shader code (see https://github.com/NVIDIAGameWorks/GraphicsSamples/blob/master/license.txt).
+
+If you are a rights holder and want something removed, open an issue on this repository.

@@ -1,0 +1,9 @@
+node_modules/
+.claude/
+.DS_Store
+_site/
+.cache/
+# generated / not redistributed from this repo: the original pack and the per-car packs built from it
+godot/index.pck
+godot/index.pck.*
+godot/packs/
