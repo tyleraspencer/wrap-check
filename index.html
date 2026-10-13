@@ -43,9 +43,10 @@
     background: linear-gradient(transparent, rgba(0,0,0,.85)); text-align: center; }
   main { position: relative; min-width: 0; }
   #car { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #1a1a1c; }
-  .bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: calc(100% - 32px);
+  .bar { position: absolute; left: 16px; right: 16px; bottom: 16px; margin: 0 auto; width: max-content; max-width: calc(100% - 32px);
+    display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(2px, .4vw, 6px);
     background: rgba(26,26,29,.88); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; padding: 6px; z-index: 2; }
-  .bar button { text-align: center; padding: 7px 11px; white-space: nowrap; }
+  .bar button { text-align: center; padding: 7px clamp(4px, .8vw, 11px); font-size: clamp(10px, .95vw, 14px); white-space: nowrap; }
   .bar button.on { border-color: var(--accent); background: #1c2740; }
   #status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 10px; background: #1a1a1c; z-index: 3; color: var(--dim); text-align: center; padding: 20px; }
@@ -319,7 +320,7 @@ function renderExamples() {
     handleFile(new File([blob], b.dataset.n + '.png', { type: 'image/png' }));
   });
 }
-$('bar').innerHTML = BAR.map(k => `<button data-cam="${k}">${VIEWS[k].label}</button>`).join('') + '<button id="spin">Auto-rotate</button>';
+$('bar').innerHTML = BAR.map(k => `<button data-cam="${k}">${VIEWS[k].label}</button>`).join('') + '<button id="spin">Rotate</button>';
 $('bar').querySelectorAll('[data-cam]').forEach(b => b.onclick = () => {
   $('spin').classList.remove('on'); spinning = false;
   $('bar').querySelectorAll('[data-cam]').forEach(x => x.classList.toggle('on', x === b));
