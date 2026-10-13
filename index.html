@@ -33,6 +33,7 @@
   #checks .dot { flex: none; width: 16px; height: 16px; border-radius: 50%; margin-top: 1px; text-align: center;
     font-size: 11px; line-height: 16px; color: #000; font-weight: 700; }
   .ok .dot { background: var(--ok); } .warn .dot { background: var(--warn); } .bad .dot { background: var(--bad); }
+  #verdict:empty, #checks:empty { display: none; }
   #verdict { margin: 8px 0 14px; font-weight: 600; font-size: 13px; }
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .grid button { padding: 0; border: 2px solid transparent; border-radius: 6px; background: #000; cursor: pointer; overflow: hidden;
@@ -278,7 +279,8 @@ async function handleFile(file, exampleBtn = null) {         // exampleBtn: the 
   if (!file) return;
   document.querySelectorAll('#examples button').forEach(x => x.classList.toggle('on', x === exampleBtn));
   const { rows, img, url } = await validate(file);
-  showChecks(rows);
+  if (exampleBtn) { $('checks').innerHTML = ''; $('verdict').textContent = ''; }       // Tesla's own files: no summary
+  else showChecks(rows);
   if (img) {
     setWrap(img);
     if (exampleBtn) {                                          // the highlighted thumbnail is the picture; no big preview
