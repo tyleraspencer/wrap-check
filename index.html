@@ -33,7 +33,7 @@
   #checks .dot { flex: none; width: 16px; height: 16px; border-radius: 50%; margin-top: 1px; text-align: center;
     font-size: 11px; line-height: 16px; color: #000; font-weight: 700; }
   .ok .dot { background: var(--ok); } .warn .dot { background: var(--warn); } .bad .dot { background: var(--bad); }
-  #verdict { margin-top: 8px; font-weight: 600; font-size: 13px; }
+  #verdict { margin: 8px 0 14px; font-weight: 600; font-size: 13px; }
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .grid button { padding: 0; border: 2px solid transparent; border-radius: 6px; background: #000; cursor: pointer; overflow: hidden;
     aspect-ratio: 1; position: relative; }
@@ -70,9 +70,9 @@
       <div class="pv"><img id="previewImg" alt="Your wrap"></div>
       <div id="previewName"></div>
     </div>
-    <div class="drop" id="drop"><b>Drop your PNG here</b><br>or click to choose<input id="file" type="file" accept="image/png" hidden></div>
     <ul id="checks"></ul>
     <div id="verdict"></div>
+    <div class="drop" id="drop"><b>Drop your PNG here</b><br>or click to choose<input id="file" type="file" accept="image/png" hidden></div>
 
     <h2>Tesla examples</h2>
     <div class="grid" id="examples"></div>
