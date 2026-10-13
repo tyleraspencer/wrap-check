@@ -16,14 +16,9 @@
   aside { background: var(--panel); border-right: 1px solid var(--line); padding: 16px; overflow-y: auto; }
   h1 { font-size: 16px; margin: 0 0 14px; letter-spacing: .2px; }
   h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); margin: 20px 0 8px; font-weight: 600; }
-  .seg { display: grid; gap: 6px; }
-  .seg button, .bar button { background: #232327; color: var(--text); border: 1px solid var(--line);
+  .bar button { background: #232327; color: var(--text); border: 1px solid var(--line);
     border-radius: 8px; padding: 9px 10px; cursor: pointer; font: inherit; text-align: left; }
-  .seg button.on { border-color: var(--accent); background: #1c2740; }
-  .grp { font-size: 11px; color: var(--dim); margin: 8px 0 2px; font-weight: 600; letter-spacing: .4px; }
-  .seg small { display: block; color: var(--dim); font-size: 11px; }
   select { width: 100%; background: #232327; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; }
-  .chk { display: flex; gap: 8px; align-items: center; margin-top: 12px; cursor: pointer; }
   .drop { border: 1.5px dashed #46464e; border-radius: 10px; padding: 18px 10px; text-align: center;
     color: var(--dim); cursor: pointer; }
   .drop.over { border-color: var(--accent); color: var(--text); background: #1c2740; }
@@ -66,18 +61,7 @@
     <h1>Wrap Check</h1>
 
     <h2>Vehicle</h2>
-    <div class="seg" id="cars"></div>
-
-    <h2>Paint underneath</h2>
-    <select id="paint">
-      <option value="PearlWhite">Pearl White</option><option value="DiamondBlack">Diamond Black</option>
-      <option value="Quicksilver">Quicksilver</option><option value="MidnightSilver">Midnight Silver</option>
-      <option value="DeepBlue">Deep Blue</option><option value="UltraRed">Ultra Red</option>
-    </select>
-    <p class="hint">Transparent areas of a wrap show this colour, like the real car.</p>
-
-    <label class="chk"><input type="checkbox" id="fix"> Correct colour for the 3D engine</label>
-    <p class="hint">The viewer renders colours darker and warmer than your file. This pre-compensates; "Flat" always shows your real PNG.</p>
+    <select id="cars" aria-label="Vehicle"></select>
 
     <h2>Your wrap</h2>
     <div class="drop" id="drop"><b>Drop your PNG here</b><br>or click to choose<input id="file" type="file" accept="image/png" hidden></div>
@@ -110,7 +94,7 @@ const CARS = [
   { id: 'modely-2025-premium', pack: 'bayberry',     group: 'Model Y',   name: 'Premium',     sub: '2025+ (Juniper)' },
   { id: 'modely-2025-performance', pack: 'bayberry', group: 'Model Y',   name: 'Performance', sub: '2025+ (Juniper)' },
   { id: 'modely-2025-base', pack: 'bayberry-e41',        group: 'Model Y',   name: 'Standard',    sub: '2025+ (Juniper)' },
-  { id: 'modely-l', pack: 'bayberry-e80',                group: 'Model Y',   name: 'Model Y L',   sub: '6-seat long wheelbase' },
+  { id: 'modely-l', pack: 'bayberry-e80',                group: 'Model Y',   name: 'Model Y L',   sub: '6-seat' },
   { id: 'modely', pack: 'y-high',                  group: 'Model Y',   name: 'Original',    sub: '2020–2024' },
   { id: 'model3-2024-base', pack: 'poppyseed',        group: 'Model 3',   name: 'Premium / Standard', sub: '2024+ (Highland)' },
   { id: 'model3-2024-performance', pack: 'poppyseed', group: 'Model 3',   name: 'Performance', sub: '2024+ (Highland)' },
@@ -136,7 +120,8 @@ const store = { get: k => { try { return localStorage.getItem(k); } catch { retu
 let car = P.get('car') || store.get('car') || CARS[0].id;
 if (!CARS.some(c => c.id === car)) car = CARS[0].id;
 const templateSize = id => id === 'cybertruck' ? [1024, 768] : [1024, 1024];   // Tesla's template.png sizes
-let rawTex = null, fixedTex = null, fixOn = store.get('fix') !== '0';
+let rawTex = null, fixedTex = null;
+let paint = P.get('paint') || 'PearlWhite';      // base paint under transparent parts of a wrap
 let ready = false, carLoaded = false, loadedCar = null, texture = null, spinning = false;
 
 let manifest = {};
@@ -187,8 +172,7 @@ function syncCar() {
 }
 
 function sendPaint() {
-  const color = $('paint').value;
-  send({ type: 'set_paint', color });
+  send({ type: 'set_paint', color: paint });
 }
 // The engine sizes its canvas from the iframe; nudge it whenever the layout changes
 // or the car comes out stretched.
@@ -218,7 +202,7 @@ function setWrap(img) {
   }
   x.putImageData(im, 0, 0);
   fixedTex = c.toDataURL('image/png');
-  texture = fixOn ? fixedTex : rawTex;
+  texture = fixedTex;                    // always colour-corrected for the engine
   pushTexture();
 }
 function loadImage(src) {
@@ -304,10 +288,11 @@ addEventListener('drop', e => { e.preventDefault(); handleFile(e.dataTransfer.fi
 
 function renderCars() {
   const groups = [...new Set(CARS.map(c => c.group))];
-  $('cars').innerHTML = groups.map(g => `<div class="grp">${g}</div>` + CARS.filter(c => c.group === g).map(c =>
-    `<button data-id="${c.id}" class="${c.id === car ? 'on' : ''}">${c.name}<small>${c.sub}${manifest[c.pack] ? ' · ' + mb(manifest[c.pack].bytes) : ''}</small></button>`).join('')).join('');
-  $('cars').querySelectorAll('button').forEach(b => b.onclick = () => switchCar(b.dataset.id));
+  $('cars').innerHTML = groups.map(g => `<optgroup label="${g}">` + CARS.filter(c => c.group === g).map(c =>
+    `<option value="${c.id}">${c.name.startsWith(g) ? c.name : `${g} ${c.name}`} · ${c.sub.replace(/ \(.*\)/, '')}${manifest[c.pack] ? ' · ' + mb(manifest[c.pack].bytes) : ''}</option>`).join('') + '</optgroup>').join('');
+  $('cars').value = car;
 }
+$('cars').onchange = () => switchCar($('cars').value);
 function switchCar(id) {
   if (id === car) return;
   car = id; store.set('car', car);
@@ -337,10 +322,6 @@ $('spin').onclick = () => {
 function showFlat(on) { $('flat').style.display = on ? 'flex' : 'none'; $('flatBtn').classList.toggle('on', on); }
 $('flatBtn').onclick = () => showFlat($('flat').style.display !== 'flex');
 
-$('fix').checked = fixOn;
-$('fix').onchange = () => { fixOn = $('fix').checked; store.set('fix', fixOn ? '1' : '0'); if (rawTex) { texture = fixOn ? fixedTex : rawTex; pushTexture(); } };
-$('paint').value = P.get('paint') || store.get('paint') || 'PearlWhite';
-$('paint').onchange = () => { store.set('paint', $('paint').value); sendPaint(); pushTexture(); };
 renderExamples();
 fetch('godot/packs/manifest.json').then(r => r.json()).catch(() => ({})).then(m => {
   manifest = m; renderCars(); if (!P.get('noengine')) loadViewer();     // noengine: validation-only page
@@ -353,7 +334,7 @@ const waitFor = async (pred, ms, what) => { const t0 = Date.now(); while (!pred(
 const b64ToFile = (b64, name) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new File([u], name, { type: 'image/png' }); };
 window.WrapCheck = {
   cars: CARS.map(c => ({ id: c.id, name: carName(c.id), pack: c.pack, template: `${RAW}/${c.id}/template.png`, templateSize: templateSize(c.id), examples: examplesFor(c.id) })),
-  state: () => ({ car, carLoaded, ready, pack: loadedPack, hasWrap: !!texture, fixOn, events: engineEvents.slice(-20) }),
+  state: () => ({ car, carLoaded, ready, pack: loadedPack, hasWrap: !!texture, events: engineEvents.slice(-20) }),
   async setCar(id, ms = 120000) {
     if (!CARS.some(c => c.id === id)) throw new Error('unknown car ' + id);
     switchCar(id); await waitFor(() => carLoaded && loadedCar === id, ms, 'car to load');
@@ -363,8 +344,7 @@ window.WrapCheck = {
     const r = await validate(b64ToFile(b64, name), car); if (!r.img) throw new Error('image could not be decoded');
     setWrap(r.img); await sleep(900); return { rows: r.rows, stats: r.stats };
   },
-  async setPaint(color) { $('paint').value = color; sendPaint(); pushTexture(); await sleep(400); },
-  async setColourCorrection(on) { fixOn = !!on; $('fix').checked = fixOn; if (rawTex) { texture = fixOn ? fixedTex : rawTex; pushTexture(); } await sleep(500); },
+  async setPaint(color) { paint = color; sendPaint(); pushTexture(); await sleep(400); },
   async camera(preset, settleMs = 1600) {
     spinning = false; send({ type: 'set_camera_auto_rotate', enabled: false }); send({ type: 'set_camera_preset', preset: PRESET[preset] || preset }); await sleep(settleMs * 0.6);
     if (ZOOM_OUT[car]) { send({ type: 'adjust_camera_zoom', delta: ZOOM_OUT[car] }); await sleep(settleMs * 0.8); }
