@@ -12,13 +12,18 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  .app { display: grid; grid-template-columns: 320px 1fr; height: 100%; }
-  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 16px; overflow-y: auto; }
+  .app { display: grid; grid-template-columns: 1fr 340px; height: 100%; }
+  aside { order: 2; background: var(--panel); border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; }
   h1 { font-size: 16px; margin: 0 0 14px; letter-spacing: .2px; }
   h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); margin: 20px 0 8px; font-weight: 600; }
   .bar button { background: #232327; color: var(--text); border: 1px solid var(--line);
     border-radius: 8px; padding: 9px 10px; cursor: pointer; font: inherit; text-align: left; }
   select { width: 100%; background: #232327; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; }
+  #preview { margin-bottom: 10px; cursor: pointer; }
+  #preview .pv { border-radius: 10px; overflow: hidden; border: 1px solid var(--line);
+    background: conic-gradient(#2a2a2e 25%, #222226 0 50%, #2a2a2e 0 75%, #222226 0) 0 0/16px 16px; }
+  #preview img { display: block; width: 100%; height: auto; }
+  #previewName { font-size: 12px; color: var(--dim); margin-top: 6px; word-break: break-all; }
   .drop { border: 1.5px dashed #46464e; border-radius: 10px; padding: 18px 10px; text-align: center;
     color: var(--dim); cursor: pointer; }
   .drop.over { border-color: var(--accent); color: var(--text); background: #1c2740; }
@@ -38,12 +43,9 @@
     background: linear-gradient(transparent, rgba(0,0,0,.85)); text-align: center; }
   main { position: relative; min-width: 0; }
   #car { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #1a1a1c; }
-  #flat { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: #1a1a1c; }
-  #flat img { max-width: min(90%, 90vh); max-height: 90%; image-rendering: auto; background:
-    conic-gradient(#2a2a2e 25%, #222226 0 50%, #2a2a2e 0 75%, #222226 0) 0 0/20px 20px; }
-  .bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 6px;
+  .bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: calc(100% - 32px);
     background: rgba(26,26,29,.88); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; padding: 6px; z-index: 2; }
-  .bar button { text-align: center; padding: 7px 12px; }
+  .bar button { text-align: center; padding: 7px 11px; white-space: nowrap; }
   .bar button.on { border-color: var(--accent); background: #1c2740; }
   #status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 10px; background: #1a1a1c; z-index: 3; color: var(--dim); text-align: center; padding: 20px; }
@@ -52,7 +54,7 @@
   #fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .hint { color: var(--dim); font-size: 12px; margin-top: 6px; }
   .embed .app { grid-template-columns: 1fr; } .embed aside, .embed .bar { display: none; }
-  @media (max-width: 760px) { .app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; } main { order: -1; } aside { border-right: 0; border-top: 1px solid var(--line); } }
+  @media (max-width: 760px) { .app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; } main { order: -1; } aside { border-left: 0; border-top: 1px solid var(--line); } }
 </style>
 </head>
 <body>
@@ -64,6 +66,10 @@
     <select id="cars" aria-label="Vehicle"></select>
 
     <h2>Your wrap</h2>
+    <div id="preview" hidden title="Click to choose a different PNG">
+      <div class="pv"><img id="previewImg" alt="Your wrap"></div>
+      <div id="previewName"></div>
+    </div>
     <div class="drop" id="drop"><b>Drop your PNG here</b><br>or click to choose<input id="file" type="file" accept="image/png" hidden></div>
     <ul id="checks"></ul>
     <div id="verdict"></div>
@@ -75,16 +81,9 @@
 
   <main>
     <iframe id="car" allow="fullscreen"></iframe>
-    <div id="flat"><img id="flatImg" alt="Flat wrap"></div>
     <div id="status"><div id="statusText">Loading…</div><div class="track"><div id="fill"></div></div>
       <div class="hint" id="statusHint"></div></div>
-    <div class="bar">
-      <button data-cam="front">Front</button>
-      <button data-cam="rear">Rear</button>
-      <button data-cam="left">Side</button>
-      <button id="spin">Auto-rotate</button>
-      <button id="flatBtn">Flat</button>
-    </div>
+    <div class="bar" id="bar"></div>
   </main>
 </div>
 
@@ -140,8 +139,14 @@ function loadViewer() {            // (re)start the engine on the selected car's
   frame.src = `godot/index.html?v=4&pck=${encodeURIComponent('packs/' + loadedPack + '.pck')}`;
 }
 const engineEvents = [];
-// The engine's camera presets are mirrored (its "front" shows the car's rear, "left" its right side). Fix the names here.
-const PRESET = { front: 'rear', rear: 'front', left: 'right', right: 'left', top: 'top', three_quarter: 'three_quarter' };
+// Camera views. horizontal: 0 = behind the car, 90 = its right side, 180 = in front, 270 = its left side (measured on the engine).
+const VIEWS = {
+  front:       { label: 'Front',        h: 180 }, front_left:  { label: 'Front L',  h: 225 }, left:  { label: 'Left',  h: 270 },
+  rear_left:   { label: 'Rear L',       h: 315 }, rear:        { label: 'Rear',     h: 0 },   rear_right: { label: 'Rear R', h: 45 },
+  right:       { label: 'Right',        h: 90 },  front_right: { label: 'Front R',  h: 135 }, top: { label: 'Top', preset: 'top' },
+  three_quarter: { h: 225, alias: true },        // the usual hero angle (front, driver side)
+};
+const BAR = ['front', 'front_left', 'left', 'rear_left', 'rear', 'rear_right', 'right', 'front_right', 'top'];
 // The presets are framed for a car; the Cybertruck is bigger and needs to pull back.
 const ZOOM_OUT = { cybertruck: 25 };
 const send = m => frame.contentWindow.postMessage(m, '*');
@@ -195,7 +200,6 @@ function setWrap(img) {
   const x = c.getContext('2d');
   x.drawImage(img, 0, 0, 1024, 1024);
   rawTex = c.toDataURL('image/png');
-  $('flatImg').src = rawTex;           // flat view always shows your true file
   const im = x.getImageData(0, 0, 1024, 1024), p = im.data;
   for (let i = 0; i < p.length; i += 4) if (p[i + 3]) {
     p[i] = LUT[p[i]]; p[i + 1] = LUT[p[i + 1]]; p[i + 2] = LUT[p[i + 2]];
@@ -271,14 +275,19 @@ function showChecks(rows) {
 async function handleFile(file) {
   if (!file) return;
   document.querySelectorAll('#examples button').forEach(b => b.classList.remove('on'));
-  const { rows, img } = await validate(file);
+  const { rows, img, url } = await validate(file);
   showChecks(rows);
-  if (img) setWrap(img);
+  if (img) {
+    setWrap(img);
+    $('previewImg').src = url; $('previewName').textContent = file.name; $('preview').hidden = false;
+    $('drop').firstElementChild.textContent = 'Drop a different PNG';
+  }
 }
 
 // ---- UI wiring ----
 const drop = $('drop'), fileIn = $('file');
 drop.onclick = () => fileIn.click();
+$('preview').onclick = () => fileIn.click();
 fileIn.onchange = () => handleFile(fileIn.files[0]);
 ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
@@ -289,7 +298,7 @@ addEventListener('drop', e => { e.preventDefault(); handleFile(e.dataTransfer.fi
 function renderCars() {
   const groups = [...new Set(CARS.map(c => c.group))];
   $('cars').innerHTML = groups.map(g => `<optgroup label="${g}">` + CARS.filter(c => c.group === g).map(c =>
-    `<option value="${c.id}">${c.name.startsWith(g) ? c.name : `${g} ${c.name}`} · ${c.sub.replace(/ \(.*\)/, '')}${manifest[c.pack] ? ' · ' + mb(manifest[c.pack].bytes) : ''}</option>`).join('') + '</optgroup>').join('');
+    `<option value="${c.id}">${c.name.startsWith(g) ? c.name : `${g} ${c.name}`} · ${c.sub.replace(/ \(.*\)/, '')}</option>`).join('') + '</optgroup>').join('');
   $('cars').value = car;
 }
 $('cars').onchange = () => switchCar($('cars').value);
@@ -299,6 +308,7 @@ function switchCar(id) {
   renderCars(); renderExamples();
   $('status').classList.remove('hide'); $('statusText').textContent = `Loading ${carName(car)}…`; $('statusHint').textContent = '';
   $('checks').innerHTML = ''; $('verdict').textContent = ''; texture = null; rawTex = fixedTex = null;
+  $('preview').hidden = true; $('drop').firstElementChild.textContent = 'Drop your PNG here';
   if (packOf(car) !== loadedPack) loadViewer(); else syncCar();
 }
 function renderExamples() {
@@ -309,18 +319,17 @@ function renderExamples() {
     handleFile(new File([blob], b.dataset.n + '.png', { type: 'image/png' }));
   });
 }
-document.querySelectorAll('[data-cam]').forEach(b => b.onclick = () => {
-  showFlat(false);
-  $('spin').classList.remove('on');
+$('bar').innerHTML = BAR.map(k => `<button data-cam="${k}">${VIEWS[k].label}</button>`).join('') + '<button id="spin">Auto-rotate</button>';
+$('bar').querySelectorAll('[data-cam]').forEach(b => b.onclick = () => {
+  $('spin').classList.remove('on'); spinning = false;
+  $('bar').querySelectorAll('[data-cam]').forEach(x => x.classList.toggle('on', x === b));
   WrapCheck.camera(b.dataset.cam);
 });
 $('spin').onclick = () => {
-  showFlat(false);
+  $('bar').querySelectorAll('[data-cam]').forEach(x => x.classList.remove('on'));
   spinning = !spinning; $('spin').classList.toggle('on', spinning);
   send({ type: 'set_camera_auto_rotate', enabled: spinning });
 };
-function showFlat(on) { $('flat').style.display = on ? 'flex' : 'none'; $('flatBtn').classList.toggle('on', on); }
-$('flatBtn').onclick = () => showFlat($('flat').style.display !== 'flex');
 
 renderExamples();
 fetch('godot/packs/manifest.json').then(r => r.json()).catch(() => ({})).then(m => {
@@ -346,7 +355,10 @@ window.WrapCheck = {
   },
   async setPaint(color) { paint = color; sendPaint(); pushTexture(); await sleep(400); },
   async camera(preset, settleMs = 1600) {
-    spinning = false; send({ type: 'set_camera_auto_rotate', enabled: false }); send({ type: 'set_camera_preset', preset: PRESET[preset] || preset }); await sleep(settleMs * 0.6);
+    spinning = false; send({ type: 'set_camera_auto_rotate', enabled: false });
+    const v = VIEWS[preset] || VIEWS.three_quarter;
+    send(v.preset ? { type: 'set_camera_preset', preset: v.preset } : { type: 'set_camera_angle', horizontal: v.h, vertical: 15, distance: -1 });
+    await sleep(settleMs * 0.6);
     if (ZOOM_OUT[car]) { send({ type: 'adjust_camera_zoom', delta: ZOOM_OUT[car] }); await sleep(settleMs * 0.8); }
   },
 };

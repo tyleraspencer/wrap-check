@@ -88,7 +88,7 @@ async function getPage(kind, car) {
 const CAR_IDS = ['modely-2025-premium', 'modely-2025-performance', 'modely-2025-base', 'modely-l', 'modely',
                  'model3-2024-base', 'model3-2024-performance', 'model3', 'cybertruck'];
 const carEnum = z.enum(CAR_IDS);
-const VIEWS = ['three_quarter', 'front', 'rear', 'left', 'right', 'top'];
+const VIEWS = ['three_quarter', 'front', 'front_left', 'front_right', 'rear', 'rear_left', 'rear_right', 'left', 'right', 'top'];
 const RAW = 'https://raw.githubusercontent.com/teslamotors/custom-wraps/master';
 const text = t => ({ type: 'text', text: t });
 const fail = msg => ({ isError: true, content: [text(msg)] });
@@ -155,10 +155,10 @@ server.registerTool('render_wrap', {
   inputSchema: {
     path: z.string().describe('Path to the wrap PNG'),
     car: carEnum,
-    views: z.array(z.enum(VIEWS)).min(1).max(6).optional().describe('Camera angles (default: three_quarter, front, rear, left, right; left and right are the car\'s own sides)'),
+    views: z.array(z.enum(VIEWS)).min(1).max(10).optional().describe('Camera angles. three_quarter is the usual front/driver-side hero shot; left and right are the car\'s own sides. Default: three_quarter, rear_right, front, rear, left, right.'),
     paint: z.enum(['PearlWhite', 'DiamondBlack', 'Quicksilver', 'MidnightSilver', 'DeepBlue', 'UltraRed']).optional().describe('Paint colour under transparent parts of the wrap (default PearlWhite)'),
   },
-}, async ({ path: p, car, views = ['three_quarter', 'front', 'rear', 'left', 'right'], paint = 'PearlWhite' }) => {
+}, async ({ path: p, car, views = ['three_quarter', 'rear_right', 'front', 'rear', 'left', 'right'], paint = 'PearlWhite' }) => {
   try {
     const { bytes, name } = readWrap(p);
     const page = await getPage('viewer', car);
