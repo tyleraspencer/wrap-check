@@ -458,7 +458,7 @@ function renderExamples() {
 }
 const markView = k => $('bar').querySelectorAll('[data-cam]').forEach(x => x.classList.toggle('on', x.dataset.cam === k));
 const validView = v => (v && BAR.includes(v) ? v : (v === 'three_quarter' || v === 'rotate' ? v : null));
-$('bar').innerHTML = BAR.map(k => `<button data-cam="${k}">${VIEWS[k].label}</button>`).join('') + '<button id="spin">Rotate</button>';
+$('bar').innerHTML = '<button id="spin">Rotate</button>' + BAR.map(k => `<button data-cam="${k}">${VIEWS[k].label}</button>`).join('');
 $('bar').querySelectorAll('[data-cam]').forEach(b => b.onclick = () => {
   $('spin').classList.remove('on'); spinning = false;
   currentView = b.dataset.cam; markView(currentView);
