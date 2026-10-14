@@ -165,6 +165,8 @@ const PACK_OVERRIDE = new URLSearchParams(location.search).get('pack');   // deb
 const packOf = id => PACK_OVERRIDE || CARS.find(c => c.id === id).pack;
 const engineId = id => CARS.find(c => c.id === id).engine || id;       // S/X have no engine id of their own
 let loadedPack = null, zoomDone = false;
+const DEFAULT_VIEW = 'rear_right';               // what the engine shows before any angle is picked (horizontal 45)
+let viewDirty = false;                          // the user dragged the car by hand, so the shared angle is only approximate
 let initialView = null, currentView = null;      // initialView: from ?view= or a share link; currentView: last angle picked with the buttons
 function loadViewer() {            // (re)start the engine on the selected car's pack
   ready = false; carLoaded = false; loadedCar = null; loadedPack = packOf(car); zoomDone = false;
@@ -228,6 +230,7 @@ const nudgeSoon = () => [0, 100, 300, 600, 1000, 2000].forEach(t => setTimeout(n
 new ResizeObserver(nudgeSoon).observe(frame);
 addEventListener('resize', nudgeSoon);
 frame.addEventListener('load', nudgeSoon);
+frame.addEventListener('load', () => { try { ['pointerdown', 'touchstart'].forEach(t => frame.contentWindow.addEventListener(t, () => { viewDirty = true; }, true)); } catch {} });
 function pushTexture() {
   if (carLoaded && texture) send({ type: 'set_texture', texture });
 }
@@ -366,7 +369,7 @@ async function shrinkForLink(file) {            // no share service: fit the wra
 }
 async function makeShareLink() {
   if (!currentShare) throw new Error('Load a wrap first');
-  const vw = currentView ? '&view=' + currentView : '';                  // open the link from the angle you are looking at
+  const vw = '&view=' + (currentView || DEFAULT_VIEW);                    // open the link at the last angle picked (or the page's default)
   if (currentShare.example) return { link: `${baseUrl()}#car=${car}&ex=${encodeURIComponent(currentShare.example)}${vw}`, note: 'Tesla example: the link just names it.' };
   if (SHARE_URL) {
     const { bytes, key } = await encryptWrap(currentShare.file);
@@ -385,7 +388,8 @@ $('shareLink').onclick = async () => {
   const b = $('shareLink'); b.disabled = true; say('Making link…');
   try {
     const { link, note } = await makeShareLink();
-    try { await navigator.clipboard.writeText(link); say('Link copied. ' + note); } catch { prompt('Copy this link:', link); say(note); }
+    const label = (VIEWS[currentView || DEFAULT_VIEW] || {}).label || 'chosen', drag = viewDirty ? ` It opens at the ${label} angle; an angle you dragged to by hand can't be saved, so pick one of the angle buttons to choose.` : '';
+    try { await navigator.clipboard.writeText(link); say('Link copied. ' + note + drag); } catch { prompt('Copy this link:', link); say(note + drag); }
   } catch (e) { say(e.message, true); } finally { b.disabled = false; }
 };
 $('sharePng').onclick = async () => {
@@ -461,7 +465,7 @@ $('bar').querySelectorAll('[data-cam]').forEach(b => b.onclick = () => {
   WrapCheck.camera(currentView);
 });
 $('spin').onclick = () => {
-  currentView = null; markView(null);
+  currentView = null; markView(null); viewDirty = true;
   spinning = !spinning; $('spin').classList.toggle('on', spinning);
   send({ type: 'set_camera_auto_rotate', enabled: spinning });
 };
@@ -499,7 +503,7 @@ window.WrapCheck = {
   },
   async setPaint(color) { paint = color; sendPaint(); pushTexture(); await sleep(400); },
   async camera(preset, settleMs = 1600) {
-    spinning = false; send({ type: 'set_camera_auto_rotate', enabled: false });
+    spinning = false; viewDirty = false; send({ type: 'set_camera_auto_rotate', enabled: false });
     const v = VIEWS[preset] || VIEWS.three_quarter;
     send(v.preset ? { type: 'set_camera_preset', preset: v.preset } : { type: 'set_camera_angle', horizontal: v.h, vertical: 15, distance: fitDistance() });
     await sleep(settleMs);
