@@ -1,0 +1,13 @@
+# Wrap Check share service. Deploy from THIS folder:  npx wrangler@4.149.0 deploy
+name = "wrap-check-share"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# Encrypted wraps live here. Wrangler creates the namespace for you on first deploy.
+[[kv_namespaces]]
+binding = "SHARES"
+
+[vars]
+# Pages that may upload / read. Add your own domain here if you ever move the site.
+ALLOWED_ORIGINS = "https://tyleraspencer.github.io,http://localhost:8123,http://127.0.0.1:8123"

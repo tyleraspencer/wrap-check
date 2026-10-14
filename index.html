@@ -27,6 +27,10 @@
   #preview .pv { border-radius: 10px; overflow: hidden; border: 1px solid var(--line);
     background: conic-gradient(#2a2a2e 25%, #222226 0 50%, #2a2a2e 0 75%, #222226 0) 0 0/16px 16px; }
   #preview img { display: block; width: 100%; height: auto; }
+  .btn { flex: 1; background: #232327; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+  .btn:hover { border-color: #46464e; } .btn:disabled { opacity: .6; cursor: default; }
+  #shareRow { display: flex; gap: 8px; margin: 0 0 8px; } #shareRow[hidden] { display: none; }
+  #shareMsg { font-size: 12px; color: var(--dim); margin: 0 0 10px; min-height: 0; } #shareMsg:empty { display: none; } #shareMsg.err { color: var(--warn); }
   #previewName { font-size: 12px; color: var(--dim); margin-top: 6px; word-break: break-all; }
   .drop { border: 1.5px dashed #46464e; border-radius: 10px; padding: 18px 10px; text-align: center;
     color: var(--dim); cursor: pointer; }
@@ -90,6 +94,11 @@
       <div class="pv"><img id="previewImg" alt="Your wrap"></div>
       <div id="previewName"></div>
     </div>
+    <div id="shareRow" hidden>
+      <button class="btn" id="shareLink">Copy share link</button>
+      <button class="btn" id="sharePng">Send PNG</button>
+    </div>
+    <div id="shareMsg"></div>
     <ul id="checks"></ul>
     <div id="verdict"></div>
     <div class="drop" id="drop"><b>Drop your PNG here</b><br><span id="dropSub">or click to choose</span><input id="file" type="file" accept="image/png" hidden></div>
@@ -109,6 +118,8 @@
 
 <script>
 const RAW = 'https://raw.githubusercontent.com/teslamotors/custom-wraps/master';
+// Address of the Wrap Check share service (share/worker.js on Cloudflare). Empty = sharing falls back to links that carry the image.
+const SHARE_URL_DEFAULT = '';
 const CARS = [
   { id: 'modely-2025-premium', pack: 'bayberry',     group: 'Model Y',   name: 'Premium',     sub: '2025+ (Juniper)' },
   { id: 'modely-2025-performance', pack: 'bayberry', group: 'Model Y',   name: 'Performance', sub: '2025+ (Juniper)' },
@@ -309,13 +320,96 @@ async function handleFile(file, exampleBtn = null) {         // exampleBtn: the 
   else showChecks(rows);
   if (img) {
     setWrap(img);
+    currentShare = exampleBtn ? { example: exampleBtn.dataset.n } : { file }; showShare();
     if (exampleBtn) {                                          // the highlighted thumbnail is the picture; no big preview
-      $('preview').hidden = true; $('drop').firstElementChild.textContent = dropText(false);
+      $('preview').hidden = true; $('drop').firstElementChild.textContent = dropText(false); currentShare = null; showShare();
     } else {
       $('previewImg').src = url; $('previewName').textContent = file.name; $('preview').hidden = false;
       $('drop').firstElementChild.textContent = dropText(true);
     }
   }
+}
+
+// ---- sharing ----
+// Wraps are encrypted in the browser (AES-GCM) before upload; the key lives only in the link's #fragment, which is never sent to any server,
+// so the share service holds unreadable bytes. If no service is configured, small wraps travel inside the link itself.
+const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+const SHARE_URL = ((LOCAL && P.get('share')) || SHARE_URL_DEFAULT).replace(/\/$/, '');
+const b64u = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64u = str => Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+const baseUrl = () => location.origin + location.pathname;
+let currentShare = null;                       // { file } for an uploaded wrap, { example } for a Tesla example
+
+async function encryptWrap(file) {
+  const png = new Uint8Array(await file.arrayBuffer());
+  const head = new TextEncoder().encode(JSON.stringify({ car, name: file.name }));
+  const plain = new Uint8Array(2 + head.length + png.length); plain[0] = head.length >> 8; plain[1] = head.length & 255; plain.set(head, 2); plain.set(png, 2 + head.length);
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain));
+  const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+  return { bytes: out, key: b64u(await crypto.subtle.exportKey('raw', key)) };
+}
+async function decryptWrap(buf, keyStr) {
+  const key = await crypto.subtle.importKey('raw', unb64u(keyStr), 'AES-GCM', false, ['decrypt']);
+  const data = new Uint8Array(buf), plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: data.slice(0, 12) }, key, data.slice(12)));
+  const n = (plain[0] << 8) | plain[1], head = JSON.parse(new TextDecoder().decode(plain.slice(2, 2 + n)));
+  return { car: head.car, file: new File([plain.slice(2 + n)], head.name || 'Shared wrap.png', { type: 'image/png' }) };
+}
+async function shrinkForLink(file) {            // no share service: fit the wrap into the link (soft, lossy)
+  const img = await loadImage(URL.createObjectURL(file)), [tw, th] = templateSize(car), k = 384 / Math.max(tw, th);
+  const c = document.createElement('canvas'); c.width = Math.round(tw * k); c.height = Math.round(th * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  const blob = await new Promise(r => c.toBlob(r, 'image/webp', 0.6));
+  return new Uint8Array(await blob.arrayBuffer());
+}
+async function makeShareLink() {
+  if (!currentShare) throw new Error('Load a wrap first');
+  if (currentShare.example) return { link: `${baseUrl()}#car=${car}&ex=${encodeURIComponent(currentShare.example)}`, note: 'Tesla example: the link just names it.' };
+  if (SHARE_URL) {
+    const { bytes, key } = await encryptWrap(currentShare.file);
+    const r = await fetch(SHARE_URL + '/', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: bytes });
+    if (!r.ok) throw new Error(r.status === 413 ? 'That file is too large to share.' : 'The share service said no (' + r.status + ').');
+    const { id, expiresInDays } = await r.json();
+    return { link: `${baseUrl()}#s=${id}.${key}`, note: `Encrypted in your browser. Works for ${expiresInDays} days.` };
+  }
+  const small = await shrinkForLink(currentShare.file), data = b64u(small);
+  if (data.length > 70000) throw new Error('Too big for a link. Use "Send PNG" instead.');
+  return { link: `${baseUrl()}#d=${car}.${data}`, note: 'The image is inside the link (softened to fit), so it is stored nowhere.' };
+}
+function showShare() { $('shareRow').hidden = !currentShare; $('sharePng').hidden = !currentShare || !!currentShare.example; $('shareMsg').textContent = ''; $('shareMsg').className = ''; }
+function say(t, err) { $('shareMsg').textContent = t; $('shareMsg').className = err ? 'err' : ''; }
+$('shareLink').onclick = async () => {
+  const b = $('shareLink'); b.disabled = true; say('Making link…');
+  try {
+    const { link, note } = await makeShareLink();
+    try { await navigator.clipboard.writeText(link); say('Link copied. ' + note); } catch { prompt('Copy this link:', link); say(note); }
+  } catch (e) { say(e.message, true); } finally { b.disabled = false; }
+};
+$('sharePng').onclick = async () => {
+  const f = currentShare && currentShare.file; if (!f) return;
+  if (navigator.canShare && navigator.canShare({ files: [f] })) { try { await navigator.share({ files: [f], title: f.name }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; a.click();
+};
+// Opens #s=<id>.<key> (stored, encrypted), #d=<car>.<data> (inside the link) and #car=<id>&ex=<name> (Tesla example).
+async function resolveHash() {
+  const h = location.hash.slice(1); if (!h) return null;
+  try {
+    if (h.startsWith('s=')) {
+      if (!SHARE_URL) throw new Error('This link needs the share service, which is not set up on this copy of the site.');
+      const [id, key] = h.slice(2).split('.');
+      const r = await fetch(`${SHARE_URL}/${id}`); if (!r.ok) throw new Error(r.status === 404 ? 'This shared wrap has expired or does not exist.' : 'Could not load the shared wrap.');
+      const { car: c, file } = await decryptWrap(await r.arrayBuffer(), key); if (CARS.some(x => x.id === c)) car = c; return { file };
+    }
+    if (h.startsWith('d=')) {
+      const [c, data] = [h.slice(2, h.indexOf('.')), h.slice(h.indexOf('.') + 1)]; if (CARS.some(x => x.id === c)) car = c;
+      const bytes = unb64u(data), webp = bytes[8] === 0x57 && bytes[9] === 0x45;       // "WEBP" magic at offset 8
+      return { file: new File([bytes], 'Shared wrap.' + (webp ? 'webp' : 'png'), { type: webp ? 'image/webp' : 'image/png' }) };
+    }
+    const q = new URLSearchParams(h);
+    if (q.get('car') && CARS.some(x => x.id === q.get('car'))) car = q.get('car');
+    if (q.get('ex')) return { example: q.get('ex') };
+  } catch (e) { return { error: e.message || 'This link could not be opened.' }; }
+  return null;
 }
 
 // ---- UI wiring ----
@@ -367,9 +461,14 @@ $('spin').onclick = () => {
 
 $('drop').firstElementChild.textContent = dropText(false); if (TOUCH) $('dropSub').hidden = true;
 renderExamples();
-fetch('godot/packs/manifest.json').then(r => r.json()).catch(() => ({})).then(m => {
-  manifest = m; renderCars(); if (!P.get('noengine')) loadViewer();     // noengine: validation-only page
-  if (P.get('wrap')) fetch(P.get('wrap')).then(r => r.blob()).then(b => handleFile(new File([b], (P.get('wrap').split('/').pop() || 'wrap.png').split('?')[0], { type: 'image/png' }))).catch(() => {});
+fetch('godot/packs/manifest.json').then(r => r.json()).catch(() => ({})).then(async m => {
+  manifest = m;
+  const shared = await resolveHash();                  // may switch `car` before the engine starts
+  renderCars(); renderExamples(); if (!P.get('noengine')) loadViewer();     // noengine: validation-only page
+  if (shared && shared.error) say(shared.error, true);
+  else if (shared && shared.file) handleFile(shared.file);
+  else if (shared && shared.example) { const b = document.querySelector(`#examples button[data-n="${CSS.escape(shared.example)}"]`); if (b) b.click(); }
+  else if (P.get('wrap')) fetch(P.get('wrap')).then(r => r.blob()).then(b => handleFile(new File([b], (P.get('wrap').split('/').pop() || 'wrap.png').split('?')[0], { type: 'image/png' }))).catch(() => {});
 });
 
 // ---- scripting API: used by the headless renderer / MCP server, and handy in the console ----
@@ -378,6 +477,7 @@ const waitFor = async (pred, ms, what) => { const t0 = Date.now(); while (!pred(
 const b64ToFile = (b64, name) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new File([u], name, { type: 'image/png' }); };
 window.WrapCheck = {
   cars: CARS.map(c => ({ id: c.id, name: carName(c.id), pack: c.pack, template: `${RAW}/${c.id}/template.png`, templateSize: templateSize(c.id), examples: examplesFor(c.id) })),
+  share: async () => (await makeShareLink()).link,
   state: () => ({ car, carLoaded, ready, pack: loadedPack, hasWrap: !!texture, events: engineEvents.slice(-20), sent: sentLog.slice() }),
   async setCar(id, ms = 120000) {
     if (!CARS.some(c => c.id === id)) throw new Error('unknown car ' + id);

@@ -7,3 +7,4 @@ _site/
 godot/index.pck
 godot/index.pck.*
 godot/packs/
+share/.wrangler/
