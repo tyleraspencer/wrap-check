@@ -208,7 +208,7 @@ addEventListener('message', e => {
     ready = true; nudgeSoon(); $('statusText').textContent = `Loading ${carName(car)}…`; syncCar();
   } else if (d.type === 'car_loaded') {
     carLoaded = true; nudgeSoon(); $('status').classList.add('hide');
-    setTimeout(() => { sendPaint(); pushTexture(); send({ type: 'set_camera_auto_rotate', enabled: spinning }); if (!zoomDone) { zoomDone = true; if (initialView) { currentView = initialView; markView(initialView); WrapCheck.camera(initialView, 300); } else { const d = fitDistance(); if (d > 0) send({ type: 'set_camera_angle', horizontal: 45, vertical: 15, distance: d }); } } }, 200);   // frame once per engine start; keeps the engine's default angle
+    setTimeout(() => { sendPaint(); pushTexture(); send({ type: 'set_camera_auto_rotate', enabled: spinning }); if (!zoomDone) { zoomDone = true; if (initialView === 'rotate') { const d = fitDistance(); if (d > 0) send({ type: 'set_camera_angle', horizontal: 45, vertical: 15, distance: d }); setTimeout(() => send({ type: 'set_camera_auto_rotate', enabled: true }), 400); } else if (initialView) { currentView = initialView; markView(initialView); WrapCheck.camera(initialView, 300); } else { const d = fitDistance(); if (d > 0) send({ type: 'set_camera_angle', horizontal: 45, vertical: 15, distance: d }); } } }, 200);   // frame once per engine start; keeps the engine's default angle
   } else if (d.type === 'godot_error') {
     $('statusText').textContent = 'Engine error: ' + (d.message || 'unknown');
   }
@@ -388,8 +388,8 @@ $('shareLink').onclick = async () => {
   const b = $('shareLink'); b.disabled = true; say('Making link…');
   try {
     const { link, note } = await makeShareLink();
-    const label = (VIEWS[currentView || DEFAULT_VIEW] || {}).label || 'chosen', drag = viewDirty ? ` It opens at the ${label} angle; an angle you dragged to by hand can't be saved, so pick one of the angle buttons to choose.` : '';
-    try { await navigator.clipboard.writeText(link); say('Link copied. ' + note + drag); } catch { prompt('Copy this link:', link); say(note + drag); }
+    const spinNote = currentView === 'rotate' ? ' It opens with the car slowly rotating.' : '', label = (VIEWS[currentView || DEFAULT_VIEW] || {}).label || 'chosen', drag = viewDirty ? ` It opens at the ${label} angle; an angle you dragged to by hand can't be saved, so pick one of the angle buttons to choose.` : '';
+    try { await navigator.clipboard.writeText(link); say('Link copied. ' + note + spinNote + drag); } catch { prompt('Copy this link:', link); say(note + spinNote + drag); }
   } catch (e) { say(e.message, true); } finally { b.disabled = false; }
 };
 $('sharePng').onclick = async () => {
@@ -457,7 +457,7 @@ function renderExamples() {
   });
 }
 const markView = k => $('bar').querySelectorAll('[data-cam]').forEach(x => x.classList.toggle('on', x.dataset.cam === k));
-const validView = v => (v && BAR.includes(v) ? v : (v === 'three_quarter' ? v : null));
+const validView = v => (v && BAR.includes(v) ? v : (v === 'three_quarter' || v === 'rotate' ? v : null));
 $('bar').innerHTML = BAR.map(k => `<button data-cam="${k}">${VIEWS[k].label}</button>`).join('') + '<button id="spin">Rotate</button>';
 $('bar').querySelectorAll('[data-cam]').forEach(b => b.onclick = () => {
   $('spin').classList.remove('on'); spinning = false;
@@ -465,18 +465,21 @@ $('bar').querySelectorAll('[data-cam]').forEach(b => b.onclick = () => {
   WrapCheck.camera(currentView);
 });
 $('spin').onclick = () => {
-  currentView = null; markView(null); viewDirty = true;
-  spinning = !spinning; $('spin').classList.toggle('on', spinning);
+  spinning = !spinning; $('spin').classList.toggle('on', spinning); markView(null);
+  currentView = spinning ? 'rotate' : null;        // shared links then open already rotating
+  viewDirty = !spinning;                           // switched off: the car stopped at an angle we can't name
   send({ type: 'set_camera_auto_rotate', enabled: spinning });
 };
 
 $('drop').firstElementChild.textContent = dropText(false); if (TOUCH) $('dropSub').hidden = true;
 renderExamples();
 initialView = validView(pendingView);
+if (initialView === 'rotate') { spinning = true; currentView = 'rotate'; $('spin').classList.add('on'); }
 fetch('godot/packs/manifest.json').then(r => r.json()).catch(() => ({})).then(async m => {
   manifest = m;
   const shared = await resolveHash();                  // may switch `car` (and the starting view) before the engine starts
   initialView = validView(pendingView);
+  if (initialView === 'rotate') { spinning = true; currentView = 'rotate'; $('spin').classList.add('on'); }
   renderCars(); renderExamples(); if (!P.get('noengine')) loadViewer();     // noengine: validation-only page
   if (shared && shared.error) say(shared.error, true);
   else if (shared && shared.file) handleFile(shared.file);

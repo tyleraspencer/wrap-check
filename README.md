@@ -26,7 +26,7 @@ Each car loads its own 20–40 MB pack from `godot/packs/` on first use and cach
 | Parameter | Example | What it does |
 |---|---|---|
 | `car` | `?car=cybertruck` | Start on this car (ids: `modely-2025-premium`, `modely-2025-performance`, `modely-2025-base`, `modely-l`, `modely`, `model3-2024-base`, `model3-2024-performance`, `model3`, `cybertruck`) |
-| `view` | `?view=rear_left` | Start from this camera angle: `front`, `front_left`, `left`, `rear_left`, `rear`, `rear_right`, `right`, `front_right`, `top`, `three_quarter` |
+| `view` | `?view=rear_left` | Start from this camera angle: `front`, `front_left`, `left`, `rear_left`, `rear`, `rear_right`, `right`, `front_right`, `top`, `three_quarter`, or `rotate` (starts slowly rotating) |
 | `touchGain` | `?touchGain=0.5` | Finger-drag sensitivity on touch screens (lower = slower, softer image) |
 
 Share links use the `#fragment`, and `&view=` can be added to any of them: `#s=<id>.<key>&view=front`, `#car=cybertruck&ex=Camo_Blue&view=rear`.
