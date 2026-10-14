@@ -110,6 +110,11 @@ Workflow:
 1. Ask which car (list_cars) if the user has not said. Each car has its own template layout.
 2. get_template(car) and design the wrap by painting inside the WHITE areas of that exact image, same pixel size. Leave everything else transparent.
    Respect Tesla's rules: PNG, 1 MB or less, 512-1024 px per side, file name of letters/numbers/spaces/_/- up to 30 characters.
+   Layout tips (learned from testing on the Model Y Premium template; confirm on other cars in the render): the top-centre shape is the hood,
+   the large middle area is the roof, the tall columns at left and right are the doors and rear quarters, and the strip at the top is a bumper.
+   The side columns are laid out sideways, so TEXT THERE MUST BE ROTATED 90 DEGREES to read upright on the car (left column: clockwise,
+   right column: counter-clockwise). Keep words short enough to stay inside the door columns, or the last letters land on the unpainted wheel arch.
+   The validator cannot see upside-down or clipped text; only the renders can.
 3. validate_wrap, then render_wrap and LOOK at every image. Check that text reads the right way round, logos land where intended, nothing important sits on a seam, and colours match the design. Fix the PNG and render again until it is right (a few rounds is normal).
 4. Finish with: the final PNG path, the best render(s), and viewer_url so the user can orbit the car themselves.
 The 3D viewer is slightly darker and less glossy than a real car: judge placement and hue, not absolute brightness. Do not claim the wrap is "verified" beyond what the renders show.`;
