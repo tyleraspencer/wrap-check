@@ -21,6 +21,17 @@ node server.js                   # serves this folder; copy _site/godot/packs in
 
 Each car loads its own 20–40 MB pack from `godot/packs/` on first use and caches it.
 
+## URL options
+
+| Parameter | Example | What it does |
+|---|---|---|
+| `car` | `?car=cybertruck` | Start on this car (ids: `modely-2025-premium`, `modely-2025-performance`, `modely-2025-base`, `modely-l`, `modely`, `model3-2024-base`, `model3-2024-performance`, `model3`, `cybertruck`) |
+| `view` | `?view=rear_left` | Start from this camera angle: `front`, `front_left`, `left`, `rear_left`, `rear`, `rear_right`, `right`, `front_right`, `top`, `three_quarter` |
+| `touchGain` | `?touchGain=0.5` | Finger-drag sensitivity on touch screens (lower = slower, softer image) |
+
+Share links use the `#fragment`, and `&view=` can be added to any of them: `#s=<id>.<key>&view=front`, `#car=cybertruck&ex=Camo_Blue&view=rear`.
+The **Copy share link** button adds the angle you last picked automatically.
+
 ## Use it from an LLM (MCP)
 
 Needs Node 20+ and Google Chrome (rendering is headless Chrome).

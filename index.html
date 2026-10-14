@@ -150,6 +150,7 @@ const EMBED = P.get('embed') === '1';                       // viewer only (used
 if (EMBED) document.body.classList.add('embed');
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 let car = P.get('car') || store.get('car') || CARS[0].id;
+let pendingView = P.get('view');
 if (!CARS.some(c => c.id === car)) car = CARS[0].id;
 const templateSize = id => id === 'cybertruck' ? [1024, 768] : [1024, 1024];   // Tesla's template.png sizes
 let rawTex = null, fixedTex = null;
@@ -164,6 +165,7 @@ const PACK_OVERRIDE = new URLSearchParams(location.search).get('pack');   // deb
 const packOf = id => PACK_OVERRIDE || CARS.find(c => c.id === id).pack;
 const engineId = id => CARS.find(c => c.id === id).engine || id;       // S/X have no engine id of their own
 let loadedPack = null, zoomDone = false;
+let initialView = null, currentView = null;      // initialView: from ?view= or a share link; currentView: last angle picked with the buttons
 function loadViewer() {            // (re)start the engine on the selected car's pack
   ready = false; carLoaded = false; loadedCar = null; loadedPack = packOf(car); zoomDone = false;
   $('status').classList.remove('hide'); $('fill').style.width = '0';
@@ -204,7 +206,7 @@ addEventListener('message', e => {
     ready = true; nudgeSoon(); $('statusText').textContent = `Loading ${carName(car)}…`; syncCar();
   } else if (d.type === 'car_loaded') {
     carLoaded = true; nudgeSoon(); $('status').classList.add('hide');
-    setTimeout(() => { sendPaint(); pushTexture(); send({ type: 'set_camera_auto_rotate', enabled: spinning }); if (!zoomDone) { zoomDone = true; const d = fitDistance(); if (d > 0) send({ type: 'set_camera_angle', horizontal: 45, vertical: 15, distance: d }); } }, 200);   // frame once per engine start; keeps the engine's default angle
+    setTimeout(() => { sendPaint(); pushTexture(); send({ type: 'set_camera_auto_rotate', enabled: spinning }); if (!zoomDone) { zoomDone = true; if (initialView) { currentView = initialView; markView(initialView); WrapCheck.camera(initialView, 300); } else { const d = fitDistance(); if (d > 0) send({ type: 'set_camera_angle', horizontal: 45, vertical: 15, distance: d }); } } }, 200);   // frame once per engine start; keeps the engine's default angle
   } else if (d.type === 'godot_error') {
     $('statusText').textContent = 'Engine error: ' + (d.message || 'unknown');
   }
@@ -364,17 +366,18 @@ async function shrinkForLink(file) {            // no share service: fit the wra
 }
 async function makeShareLink() {
   if (!currentShare) throw new Error('Load a wrap first');
-  if (currentShare.example) return { link: `${baseUrl()}#car=${car}&ex=${encodeURIComponent(currentShare.example)}`, note: 'Tesla example: the link just names it.' };
+  const vw = currentView ? '&view=' + currentView : '';                  // open the link from the angle you are looking at
+  if (currentShare.example) return { link: `${baseUrl()}#car=${car}&ex=${encodeURIComponent(currentShare.example)}${vw}`, note: 'Tesla example: the link just names it.' };
   if (SHARE_URL) {
     const { bytes, key } = await encryptWrap(currentShare.file);
     const r = await fetch(SHARE_URL + '/', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: bytes });
     if (!r.ok) throw new Error(r.status === 413 ? 'That file is too large to share.' : 'The share service said no (' + r.status + ').');
     const { id, expiresInDays } = await r.json();
-    return { link: `${baseUrl()}#s=${id}.${key}`, note: `Encrypted in your browser. Works for ${expiresInDays} days.` };
+    return { link: `${baseUrl()}#s=${id}.${key}${vw}`, note: `Encrypted in your browser. Works for ${expiresInDays} days.` };
   }
   const small = await shrinkForLink(currentShare.file), data = b64u(small);
   if (data.length > 70000) throw new Error('Too big for a link. Use "Send PNG" instead.');
-  return { link: `${baseUrl()}#d=${car}.${data}`, note: 'The image is inside the link (softened to fit), so it is stored nowhere.' };
+  return { link: `${baseUrl()}#d=${car}.${data}${vw}`, note: 'The image is inside the link (softened to fit), so it is stored nowhere.' };
 }
 function showShare() { $('shareRow').hidden = !currentShare; $('sharePng').hidden = !currentShare || !!currentShare.example; $('shareMsg').textContent = ''; $('shareMsg').className = ''; }
 function say(t, err) { $('shareMsg').textContent = t; $('shareMsg').className = err ? 'err' : ''; }
@@ -392,7 +395,9 @@ $('sharePng').onclick = async () => {
 };
 // Opens #s=<id>.<key> (stored, encrypted), #d=<car>.<data> (inside the link) and #car=<id>&ex=<name> (Tesla example).
 async function resolveHash() {
-  const h = location.hash.slice(1); if (!h) return null;
+  const h0 = location.hash.slice(1); if (!h0) return null;
+  const hv = validView(new URLSearchParams(h0.slice(h0.indexOf('&') + 1)).get('view')); if (hv && h0.includes('&')) pendingView = hv;
+  const h = h0.split('&')[0].startsWith('car=') ? h0 : h0.split('&')[0];     // car=..&ex=.. keeps its params; s=/d= links lose the &view= tail
   try {
     if (h.startsWith('s=')) {
       if (!SHARE_URL) throw new Error('This link needs the share service, which is not set up on this copy of the site.');
@@ -447,23 +452,27 @@ function renderExamples() {
     handleFile(new File([blob], b.dataset.n + '.png', { type: 'image/png' }), b);
   });
 }
+const markView = k => $('bar').querySelectorAll('[data-cam]').forEach(x => x.classList.toggle('on', x.dataset.cam === k));
+const validView = v => (v && BAR.includes(v) ? v : (v === 'three_quarter' ? v : null));
 $('bar').innerHTML = BAR.map(k => `<button data-cam="${k}">${VIEWS[k].label}</button>`).join('') + '<button id="spin">Rotate</button>';
 $('bar').querySelectorAll('[data-cam]').forEach(b => b.onclick = () => {
   $('spin').classList.remove('on'); spinning = false;
-  $('bar').querySelectorAll('[data-cam]').forEach(x => x.classList.toggle('on', x === b));
-  WrapCheck.camera(b.dataset.cam);
+  currentView = b.dataset.cam; markView(currentView);
+  WrapCheck.camera(currentView);
 });
 $('spin').onclick = () => {
-  $('bar').querySelectorAll('[data-cam]').forEach(x => x.classList.remove('on'));
+  currentView = null; markView(null);
   spinning = !spinning; $('spin').classList.toggle('on', spinning);
   send({ type: 'set_camera_auto_rotate', enabled: spinning });
 };
 
 $('drop').firstElementChild.textContent = dropText(false); if (TOUCH) $('dropSub').hidden = true;
 renderExamples();
+initialView = validView(pendingView);
 fetch('godot/packs/manifest.json').then(r => r.json()).catch(() => ({})).then(async m => {
   manifest = m;
-  const shared = await resolveHash();                  // may switch `car` before the engine starts
+  const shared = await resolveHash();                  // may switch `car` (and the starting view) before the engine starts
+  initialView = validView(pendingView);
   renderCars(); renderExamples(); if (!P.get('noengine')) loadViewer();     // noengine: validation-only page
   if (shared && shared.error) say(shared.error, true);
   else if (shared && shared.file) handleFile(shared.file);
