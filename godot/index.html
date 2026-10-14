@@ -384,7 +384,14 @@
 			
 			// Make this global so bridge can call it
 			window.adjustCanvasDimensions = function() {
+				// The engine measures a finger drag in canvas pixels, so a phone's 2-3x pixel ratio makes dragging 2-3x too sensitive.
+				// On touch screens render at TOUCH_GAIN x the device ratio (never below 1x): drags feel proportionally slower and it saves battery.
+				// Tune with ?touchGain=0.5 (lower = slower/softer, 1 = full resolution).
 				var scale = window.devicePixelRatio || 1;
+				if (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
+					var g = parseFloat(new URLSearchParams(window.location.search).get('touchGain'));
+					scale = Math.max(1, scale * (isNaN(g) ? 0.7 : g));
+				}
 				var width = window.innerWidth;
 				var height = window.innerHeight;
 				

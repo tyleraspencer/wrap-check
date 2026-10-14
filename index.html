@@ -158,7 +158,7 @@ function loadViewer() {            // (re)start the engine on the selected car's
   $('status').classList.remove('hide'); $('fill').style.width = '0';
   $('statusText').textContent = `Downloading ${carName(car)}…`;
   $('statusHint').textContent = packSize(car) ? `${packSize(car)} — cached after the first load` : '';
-  frame.src = `godot/index.html?v=4&pck=${encodeURIComponent('packs/' + loadedPack + '.pck')}`;
+  frame.src = `godot/index.html?v=4&pck=${encodeURIComponent('packs/' + loadedPack + '.pck')}${P.get('touchGain') ? '&touchGain=' + encodeURIComponent(P.get('touchGain')) : ''}`;
 }
 const engineEvents = [];
 // Camera views. horizontal: 0 = behind the car, 90 = its right side, 180 = in front, 270 = its left side (measured on the engine).
