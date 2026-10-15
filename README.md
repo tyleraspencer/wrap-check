@@ -21,9 +21,9 @@ node server.js                   # serves this folder; copy _site/godot/packs in
 
 Each car loads its own 20–40 MB pack from `godot/packs/` on first use and caches it.
 
-## Marking up the car view
+## Annotating the car view
 
-Click **✎ Mark up** (bottom-left of the car view). The tools open upward from the button and the car **freezes**: auto-rotate stops, drags, scrolling and pinching no longer move it, and the angle buttons lock until you press **Done**.
+Click **✎ Annotate** (bottom-left of the car view). The tools open upward from the button and the car **freezes**: auto-rotate stops, drags, scrolling and pinching no longer move it, and the angle buttons lock until you press **Done**.
 Draw arrows, boxes, freehand strokes and text notes in five colours (Undo and Clear included), then **Copy image** (paste it into an LLM chat), **Download**, or **Share…** (phones).
 Attach the picture with your wrap PNG so the LLM can see what to change. Everything is made in your browser; nothing is uploaded.
 
