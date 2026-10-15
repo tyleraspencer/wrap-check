@@ -474,6 +474,13 @@ async function resolveHash() {
 // Reading the 3D canvas between frames returns a blank image, but reading it inside the engine's own frame works.
 const grabFrame = () => new Promise(res => frame.contentWindow.requestAnimationFrame(() => { try { res(frame.contentWindow.document.getElementById('canvas').toDataURL('image/png')); } catch { res(null); } }));
 const looksBlank = url => new Promise(res => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'); x.drawImage(i, 0, 0, 32, 32); const d = x.getImageData(0, 0, 32, 32).data, seen = new Set(); for (let k = 0; k < d.length; k += 4) seen.add((d[k] >> 3) + ',' + (d[k + 1] >> 3) + ',' + (d[k + 2] >> 3)); res(seen.size <= 2); }; i.onerror = () => res(true); i.src = url; });
+const grabCopy = () => new Promise(res => frame.contentWindow.requestAnimationFrame(() => {      // copy the engine's canvas inside its own frame callback: instant, no PNG round-trip
+  try {
+    const src = frame.contentWindow.document.getElementById('canvas'), c = document.createElement('canvas'); c.width = src.width; c.height = src.height; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(src, 0, 0);
+    const t = document.createElement('canvas'); t.width = t.height = 32; const y = t.getContext('2d', { willReadFrequently: true }); y.drawImage(c, 0, 0, 32, 32); const d = y.getImageData(0, 0, 32, 32).data; let lit = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] && (d[i] || d[i + 1] || d[i + 2])) lit++; res(lit > 2 ? c : null);
+  } catch { res(null); }
+}));
+async function captureCarCopy() { for (let n = 0; n < 4; n++) { const c = await grabCopy(); if (c) return c; } return null; }
 async function captureCar() { for (let n = 0; n < 4; n++) { const u = await grabFrame(); if (u && !(await looksBlank(u))) return u; } return null; }
 
 // Marks are stored in 0..1 coordinates, so they scale to the on-screen overlay and to the full-size export alike.
@@ -485,7 +492,7 @@ const mkCanvas = $('mkCanvas'), mkCtx = mkCanvas.getContext('2d');
 const mkFontSpec = size => `700 ${size}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
 const mkU = () => mkCanvas.width / (mkCanvas.getBoundingClientRect().width || 1);     // canvas pixels per CSS pixel, so handles stay a constant on-screen size
 function mkRect() {                                           // where the frozen picture sits on the canvas: fitted to its own aspect, then zoomed and panned
-  const cw = mkCanvas.width, ch = mkCanvas.height, iw = mk.img ? mk.img.naturalWidth : cw, ih = mk.img ? mk.img.naturalHeight : ch;
+  const cw = mkCanvas.width, ch = mkCanvas.height, iw = mk.img ? mk.img.width : cw, ih = mk.img ? mk.img.height : ch;
   const s = Math.min(cw / iw, ch / ih) * mk.z, w = iw * s, h = ih * s; let x = cw / 2 - mk.cx * w, y = ch / 2 - mk.cy * h;
   x = w <= cw ? (cw - w) / 2 : Math.min(0, Math.max(cw - w, x)); y = h <= ch ? (ch - h) / 2 : Math.min(0, Math.max(ch - h, y));
   mk.cx = (cw / 2 - x) / w; mk.cy = (ch / 2 - y) / h; return { x, y, w, h };
@@ -576,13 +583,21 @@ function mkResumeSpin(deferEngine) {                                  // put Rot
 }
 function mkBackdrop() {                                       // paint the area around the picture in the picture's own background colour, so zooming out shows open space, not borders
   try {
-    const c = document.createElement('canvas'), w = mk.img.naturalWidth, h = mk.img.naturalHeight; c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(mk.img, 0, 0);
+    const c = document.createElement('canvas'), w = mk.img.width, h = mk.img.height; c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(mk.img, 0, 0);
     const px = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]].map(q => x.getImageData(q[0], q[1], 1, 1).data), m = i => Math.round(px.reduce((t, d) => t + d[i], 0) / 4);
     mkCanvas.style.background = `rgb(${m(0)},${m(1)},${m(2)})`;
   } catch { mkCanvas.style.background = ''; }
 }
-async function mkGrabSharp() {                                // photograph the pinned engine; the picture is the same frame, just with more pixels
-  const u = await captureCar(); if (!u) return null; return loadImage(u);
+const mkGrabSharp = () => captureCarCopy();                   // photograph the pinned engine; the picture is the same frame, just with more pixels
+const mkSig = c => { const t = document.createElement('canvas'); t.width = t.height = 48; const y = t.getContext('2d', { willReadFrequently: true }); y.drawImage(c, 0, 0, 48, 48); return y.getImageData(0, 0, 48, 48).data; };
+const mkSigDiff = (a, b) => { let d = 0; for (let i = 0; i < a.length; i += 4) d += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return d / (a.length / 4) / 3; };
+async function mkSettle() {                                   // the engine needs a few frames to actually stop turning; swap in its resting frame so the later sharp capture lines up
+  const t = mk.rt; let prev = null, sig = null;
+  for (let i = 0; i < 40 && mk.on && t === mk.rt; i++) {
+    const c = await grabCopy(); if (!c) continue; const g = mkSig(c);
+    if (prev && mkSigDiff(prev, g) < 0.15) { if (mk.on && t === mk.rt) { mk.img = c; mkRedraw(); } return true; } prev = g;
+  }
+  return mk.on && t === mk.rt;
 }
 function mkSharpen() {                                        // after the instant freeze: render the engine larger (same framing) and swap in a sharper picture
   const t = ++mk.rt, cv = (() => { try { return frame.contentWindow.document.getElementById('canvas'); } catch { return null; } })(); if (!cv || !mk.fw) return;
@@ -592,25 +607,26 @@ function mkSharpen() {                                        // after the insta
     if (!mk.on || t !== mk.rt) return;
     if (cv.width < want && Date.now() - t0 < 2500) return setTimeout(tick, 120);
     setTimeout(async () => { if (!mk.on || t !== mk.rt) return; const img = await mkGrabSharp(); if (!img || !mk.on || t !== mk.rt) return;
-      if (Math.abs(img.naturalWidth / img.naturalHeight - mk.img.naturalWidth / mk.img.naturalHeight) > 0.01) return; mk.img = img; mkBackdrop(); mkRedraw(); }, 250);
+      if (Math.abs(img.width / img.height - mk.img.width / mk.img.height) > 0.01) return; mk.img = img; mkBackdrop(); mkRedraw(); }, 250);
   }; tick();
 }
 function mkRefresh(delay = 700) {                           // the wrap (or car) changed while frozen: re-photograph the engine at the same camera, keep the marks
   if (!mk.on || !mk.ready) return; const t = ++mk.rt; mkSay('Updating…');
   setTimeout(async () => {
     if (!mk.on || t !== mk.rt) return; const img = await mkGrabSharp(); if (!img || !mk.on || t !== mk.rt) return;
-    if (Math.abs(img.naturalWidth / img.naturalHeight - mk.img.naturalWidth / mk.img.naturalHeight) > 0.01) return; mk.img = img; mkBackdrop(); mkRedraw(); mkSay('Wrap updated');
+    if (Math.abs(img.width / img.height - mk.img.width / mk.img.height) > 0.01) return; mk.img = img; mkBackdrop(); mkRedraw(); mkSay('Wrap updated');
   }, delay);
 }
 async function startMarkup() {                               // freeze instantly: grab the current frame and draw on that picture
   if (mk.on || mk.pending) return; if (mk.leaving) { mk.pending = true; mk.cancel = false; await mk.leaving; mk.pending = false; if (mk.cancel) { mk.cancel = false; return; } } if (mk.on) return; mk.on = true; mk.ready = false; mk.shapes = []; mk.hist = []; mk.sel = null; mk.drag = null; mk.live = null; mk.z = 1; mk.cx = mk.cy = .5; mk.pts.clear(); mk.gest = mk.pan = null;
   const fr = frame.getBoundingClientRect(); mk.fw = fr.width; mk.fh = fr.height; mk.S = 1; frame.style.cssText = `inset:auto;left:0;top:0;width:${fr.width}px;height:${fr.height}px`;      // the engine keeps this size while frozen, so a re-capture lines up with the marks
+  const shot = captureCarCopy();                                      // asked for first, so the picture is the frame on screen at the click
   resumeSpin = spinning; spinning = false; $('spin').classList.remove('on'); send({ type: 'set_camera_auto_rotate', enabled: false });
-  const url = await captureCar(); if (!mk.on) return;
-  if (!url) { mk.on = false; alert('Could not capture the 3D view in this browser.'); frame.style.cssText = ''; mkResumeSpin(); return; }
-  mk.img = await loadImage(url); if (!mk.on) return;
+  const img = await shot; if (!mk.on) return;
+  if (!img) { mk.on = false; alert('Could not capture the 3D view in this browser.'); frame.style.cssText = ''; mkResumeSpin(); return; }
+  mk.img = img;
   document.body.classList.add('marking'); $('mkPanel').hidden = false; setMarkBtn(true); $('mkChip').hidden = false; $('mkChip').textContent = 'View frozen · draw on the car';
-  mkBackdrop(); mkSize(); mk.ready = true; mkCursor(-1, -1); mkSharpen();
+  mkBackdrop(); mkSize(); mk.ready = true; mkCursor(-1, -1); mkSettle().then(ok => { if (ok && mk.on) mkSharpen(); });
   $('mkShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([], 'a.png', { type: 'image/png' })] }));
 }
 function stopMarkup() {
@@ -636,7 +652,7 @@ function stopMarkup() {
 $('markBtn').onclick = () => (mk.on ? stopMarkup() : mk.pending ? (mk.cancel = !mk.cancel) : startMarkup());
 async function mkRender() {                                  // full-size picture: the very frame you marked, plus the marks (no selection handles)
   mkCommitText(); if (!mk.img) { mkSay('Nothing to export yet.'); return null; }
-  const c = document.createElement('canvas'); c.width = mk.img.naturalWidth; c.height = mk.img.naturalHeight;
+  const c = document.createElement('canvas'); c.width = mk.img.width; c.height = mk.img.height;
   const x = c.getContext('2d'); x.drawImage(mk.img, 0, 0); mk.shapes.forEach(sh => mkDrawShape(x, sh, c.width, c.height)); return new Promise(r => c.toBlob(r, 'image/png'));
 }
 const mkName = () => `wrapcheck-${car}-markup.png`;
