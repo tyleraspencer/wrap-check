@@ -64,7 +64,21 @@
   #fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .hint { color: var(--dim); font-size: 12px; margin-top: 6px; }
   .embed .app { grid-template-columns: 1fr; } .embed aside, .embed .bar { display: none; }
+  .mark-btn { position: absolute; top: 12px; right: 12px; z-index: 2; background: rgba(26,26,29,.88); backdrop-filter: blur(8px); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .mark-btn:hover { border-color: #46464e; } .embed .mark-btn { display: none; }
+  #mk { position: fixed; inset: 0; z-index: 60; background: #0d0d10; display: flex; flex-direction: column; } #mk[hidden] { display: none; }
+  .mk-top, .mk-bottom { display: flex; gap: 6px; align-items: center; padding: 8px 10px; flex: none; flex-wrap: wrap; }       /* wrap, never scroll: Close must always be visible */
+  .mk-top { border-bottom: 1px solid var(--line); } .mk-bottom { border-top: 1px solid var(--line); padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  .mk-grow { flex: 1; } .mk-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; flex: none; }
+  .tool { flex: none; background: #232327; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+  .tool.on { border-color: var(--accent); background: #1c2740; } .sw { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; box-shadow: 0 0 0 1px var(--line); } .sw.on { border-color: #fff; }
+  .mk-bottom .btn { flex: none; padding: 9px 16px; } #mkMsg { color: var(--dim); font-size: 12px; margin-left: 6px; white-space: nowrap; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .mk-stage { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 10px; }
+  #mkCanvas { touch-action: none; cursor: crosshair; border-radius: 8px; border: 1px solid var(--line); background: #26262b; display: block; }
+  .mk-text { position: absolute; z-index: 3; background: rgba(0,0,0,.35); border: 1px dashed #fff; border-radius: 4px; color: #fff; font-weight: 700; padding: 0 4px; outline: none; min-width: 80px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   @media (max-width: 760px) {
+    .mk-sep { display: none; } .mk-grow { display: none; } .mk-top .tool, .mk-top .sw { margin: 0; } .mk-top .plain { margin-left: 0; }
     html, body { height: auto; }
     .app { display: flex; flex-direction: column; height: auto; }
     main { order: -1; flex: none; position: sticky; top: 0; height: 52vh; height: 52dvh; z-index: 5; border-bottom: 1px solid var(--line); }
@@ -112,8 +126,22 @@
     <iframe id="car" allow="fullscreen"></iframe>
     <div id="status"><div id="statusText">Loading…</div><div class="track"><div id="fill"></div></div>
       <div class="hint" id="statusHint"></div></div>
+    <button class="mark-btn" id="markBtn" title="Draw arrows and notes on the car view and save it as an image">✎ Mark up</button>
     <div class="bar" id="bar"></div>
   </main>
+</div>
+
+<div id="mk" hidden role="dialog" aria-label="Mark up the car view">
+  <div class="mk-top">
+    <button class="tool on" data-t="arrow">Arrow</button><button class="tool" data-t="box">Box</button><button class="tool" data-t="pen">Pen</button><button class="tool" data-t="text">Text</button>
+    <span class="mk-sep"></span>
+    <button class="sw on" data-c="#ef4444" style="background:#ef4444" aria-label="Red"></button><button class="sw" data-c="#facc15" style="background:#facc15" aria-label="Yellow"></button><button class="sw" data-c="#22c55e" style="background:#22c55e" aria-label="Green"></button><button class="sw" data-c="#3b82f6" style="background:#3b82f6" aria-label="Blue"></button><button class="sw" data-c="#ffffff" style="background:#ffffff" aria-label="White"></button>
+    <span class="mk-sep"></span>
+    <button class="tool plain" id="mkUndo">Undo</button><button class="tool plain" id="mkClear">Clear</button>
+    <span class="mk-grow"></span><button class="tool plain" id="mkClose">Close</button>
+  </div>
+  <div class="mk-stage" id="mkStage"><canvas id="mkCanvas"></canvas></div>
+  <div class="mk-bottom"><button class="btn primary" id="mkCopy">Copy image</button><button class="btn" id="mkSave">Download</button><button class="btn" id="mkShare" hidden>Share…</button><span id="mkMsg"></span></div>
 </div>
 
 <script>
@@ -420,6 +448,80 @@ async function resolveHash() {
   } catch (e) { return { error: e.message || 'This link could not be opened.' }; }
   return null;
 }
+
+// ---- mark up the car view ----
+// Reading the 3D canvas between frames returns a blank image, but reading it inside the engine's own frame works.
+const grabFrame = () => new Promise(res => frame.contentWindow.requestAnimationFrame(() => { try { res(frame.contentWindow.document.getElementById('canvas').toDataURL('image/png')); } catch { res(null); } }));
+const looksBlank = url => new Promise(res => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'); x.drawImage(i, 0, 0, 32, 32); const d = x.getImageData(0, 0, 32, 32).data, seen = new Set(); for (let k = 0; k < d.length; k += 4) seen.add((d[k] >> 3) + ',' + (d[k + 1] >> 3) + ',' + (d[k + 2] >> 3)); res(seen.size <= 2); }; i.onerror = () => res(true); i.src = url; });
+async function captureCar() { for (let n = 0; n < 4; n++) { const u = await grabFrame(); if (u && !(await looksBlank(u))) return u; } return null; }
+
+const mk = { shapes: [], tool: 'arrow', color: '#ef4444', img: null, W: 0, H: 0, live: null, scale: 1, input: null };
+const mkCanvas = $('mkCanvas'), mkCtx = mkCanvas.getContext('2d');
+const mkLW = () => Math.max(3, Math.round(mk.W * 0.0045)), mkFont = () => Math.round(mk.W * 0.034);
+function mkDraw(sh) {
+  const c = mkCtx; c.save(); c.strokeStyle = sh.c; c.fillStyle = sh.c; c.lineWidth = mkLW(); c.lineCap = c.lineJoin = 'round';
+  if (sh.t === 'pen') { c.beginPath(); sh.pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); }
+  else if (sh.t === 'box') { c.strokeRect(sh.x, sh.y, sh.w, sh.h); }
+  else if (sh.t === 'arrow') {
+    const a = Math.atan2(sh.y2 - sh.y1, sh.x2 - sh.x1), h = Math.max(16, mk.W * 0.03);
+    c.beginPath(); c.moveTo(sh.x1, sh.y1); c.lineTo(sh.x2 - Math.cos(a) * h * 0.6, sh.y2 - Math.sin(a) * h * 0.6); c.stroke();
+    c.beginPath(); c.moveTo(sh.x2, sh.y2); c.lineTo(sh.x2 - h * Math.cos(a - 0.45), sh.y2 - h * Math.sin(a - 0.45)); c.lineTo(sh.x2 - h * Math.cos(a + 0.45), sh.y2 - h * Math.sin(a + 0.45)); c.closePath(); c.fill();
+  } else if (sh.t === 'text') {
+    c.font = `700 ${sh.size}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`; c.textBaseline = 'top'; c.lineWidth = Math.max(3, sh.size * 0.18); c.strokeStyle = 'rgba(0,0,0,.85)';
+    sh.s.split('\n').forEach((line, i) => { c.strokeText(line, sh.x, sh.y + i * sh.size * 1.15); c.fillText(line, sh.x, sh.y + i * sh.size * 1.15); });
+  }
+  c.restore();
+}
+function mkRedraw() { mkCtx.drawImage(mk.img, 0, 0, mk.W, mk.H); mk.shapes.forEach(mkDraw); if (mk.live) mkDraw(mk.live); }
+function mkFit() { const st = $('mkStage'), r = st.getBoundingClientRect(), pad = 20; mk.scale = Math.min((r.width - pad) / mk.W, (r.height - pad) / mk.H, 1.5); mkCanvas.style.width = Math.round(mk.W * mk.scale) + 'px'; mkCanvas.style.height = Math.round(mk.H * mk.scale) + 'px'; }
+const mkPos = e => { const r = mkCanvas.getBoundingClientRect(); return [(e.clientX - r.left) * mk.W / r.width, (e.clientY - r.top) * mk.H / r.height]; };
+function mkSay(t) { $('mkMsg').textContent = t; }
+function mkCommitText() {
+  const inp = mk.input; if (!inp) return; mk.input = null;
+  const v = inp.value.trim(); if (v) mk.shapes.push({ t: 'text', x: inp._x, y: inp._y, s: v, c: mk.color, size: mkFont() }); inp.remove(); mkRedraw();
+}
+async function openMarkup() {
+  $('markBtn').disabled = true; const label = $('markBtn').textContent; $('markBtn').textContent = 'Capturing…';
+  const url = await captureCar(); $('markBtn').disabled = false; $('markBtn').textContent = label;
+  if (!url) { alert('Could not capture the 3D view in this browser.'); return; }
+  mk.img = await loadImage(url); mk.W = mk.img.naturalWidth; mk.H = mk.img.naturalHeight; mk.shapes = []; mk.live = null;
+  mkCanvas.width = mk.W; mkCanvas.height = mk.H; $('mk').hidden = false; document.body.style.overflow = 'hidden'; $('mkShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([], 'a.png', { type: 'image/png' })] }));
+  mkSay('Draw on the car. Then copy or download the image.'); mkFit(); mkRedraw();
+}
+function closeMarkup() { mkCommitText(); $('mk').hidden = true; document.body.style.overflow = ''; }
+const mkBlob = () => { mkCommitText(); mk.live = null; mkRedraw(); return new Promise(r => mkCanvas.toBlob(r, 'image/png')); };
+const mkName = () => `wrapcheck-${car}-markup.png`;
+mkCanvas.addEventListener('pointerdown', e => {
+  if (e.button > 0) return; mkCommitText(); const [x, y] = mkPos(e);
+  if (mk.tool === 'text') { mk.textAt = [x, y]; e.preventDefault(); return; }       // the note box is created on release so it keeps focus
+  mkCanvas.setPointerCapture(e.pointerId);
+  mk.live = mk.tool === 'pen' ? { t: 'pen', pts: [[x, y]], c: mk.color } : mk.tool === 'box' ? { t: 'box', x, y, w: 0, h: 0, c: mk.color, x0: x, y0: y } : { t: 'arrow', x1: x, y1: y, x2: x, y2: y, c: mk.color };
+});
+mkCanvas.addEventListener('pointermove', e => {
+  const l = mk.live; if (!l) return; const [x, y] = mkPos(e);
+  if (l.t === 'pen') l.pts.push([x, y]); else if (l.t === 'box') { l.x = Math.min(l.x0, x); l.y = Math.min(l.y0, y); l.w = Math.abs(x - l.x0); l.h = Math.abs(y - l.y0); } else { l.x2 = x; l.y2 = y; }
+  mkRedraw();
+});
+function mkPlaceText() {                                     // click to place, type, Enter to finish
+  const [x, y] = mk.textAt; mk.textAt = null;
+  const inp = document.createElement('input'), r = mkCanvas.getBoundingClientRect(), sr = $('mkStage').getBoundingClientRect();
+  inp.className = 'mk-text'; inp.placeholder = 'Type a note'; inp._x = x; inp._y = y; inp.style.left = (r.left - sr.left + x * mk.scale) + 'px'; inp.style.top = (r.top - sr.top + y * mk.scale) + 'px';
+  inp.style.fontSize = Math.round(mkFont() * mk.scale) + 'px'; inp.style.color = mk.color; mk.input = inp; $('mkStage').appendChild(inp); inp.focus();
+  inp.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); mkCommitText(); } else if (ev.key === 'Escape') { ev.stopPropagation(); mk.input = null; inp.remove(); } };
+}
+const mkEnd = () => { if (mk.textAt) { mkPlaceText(); return; } const l = mk.live; if (!l) return; mk.live = null;
+  const big = l.t === 'pen' ? l.pts.length > 2 : l.t === 'box' ? l.w > 6 && l.h > 6 : Math.hypot(l.x2 - l.x1, l.y2 - l.y1) > 12;
+  if (big) mk.shapes.push(l); mkRedraw(); };
+mkCanvas.addEventListener('pointerup', mkEnd); mkCanvas.addEventListener('pointercancel', mkEnd);
+document.querySelectorAll('#mk .tool[data-t]').forEach(b => b.onclick = () => { mkCommitText(); mk.tool = b.dataset.t; document.querySelectorAll('#mk .tool[data-t]').forEach(x => x.classList.toggle('on', x === b)); });
+document.querySelectorAll('#mk .sw').forEach(b => b.onclick = () => { mk.color = b.dataset.c; document.querySelectorAll('#mk .sw').forEach(x => x.classList.toggle('on', x === b)); });
+$('mkUndo').onclick = () => { mkCommitText(); mk.shapes.pop(); mkRedraw(); }; $('mkClear').onclick = () => { mkCommitText(); mk.shapes = []; mkRedraw(); };
+$('mkClose').onclick = closeMarkup; $('markBtn').onclick = openMarkup;
+addEventListener('keydown', e => { if (!$('mk').hidden) { if (e.key === 'Escape') closeMarkup(); else if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); $('mkUndo').click(); } } });
+addEventListener('resize', () => { if (!$('mk').hidden) mkFit(); });
+$('mkSave').onclick = async () => { const blob = await mkBlob(), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = mkName(); a.click(); mkSay('Saved ' + mkName()); };
+$('mkCopy').onclick = async () => { const blob = await mkBlob(); try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); mkSay('Image copied. Paste it into your chat.'); } catch { mkSay('This browser blocked copying. Use Download instead.'); } };
+$('mkShare').onclick = async () => { const f = new File([await mkBlob()], mkName(), { type: 'image/png' }); try { await navigator.share({ files: [f], title: 'Wrap markup' }); } catch (e) { if (e.name !== 'AbortError') mkSay('Sharing failed. Use Download instead.'); } };
 
 // ---- UI wiring ----
 const drop = $('drop'), fileIn = $('file');

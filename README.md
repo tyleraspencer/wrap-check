@@ -21,6 +21,12 @@ node server.js                   # serves this folder; copy _site/godot/packs in
 
 Each car loads its own 20–40 MB pack from `godot/packs/` on first use and caches it.
 
+## Marking up the car view
+
+Click **✎ Mark up** (top-right of the car view) to freeze the current view and draw on it: arrows, boxes, freehand and text notes in five colours, with Undo and Clear.
+Then **Copy image** (paste it straight into an LLM chat), **Download**, or **Share…** (on phones). Attach it to your message together with your wrap PNG so the LLM can see what to change.
+The image is made entirely in your browser; nothing is uploaded.
+
 ## URL options
 
 | Parameter | Example | What it does |
