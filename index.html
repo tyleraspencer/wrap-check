@@ -81,9 +81,9 @@
   .tool:focus-visible, .sw:focus-visible, .mark-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .sw { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; box-shadow: 0 0 0 1px var(--line); margin: 2px 0; } .sw.cur { border-color: #fff; }
   #mkFly { position: absolute; z-index: 8; display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: rgba(26,26,29,.96); border: 1px solid var(--line); border-radius: 999px; box-shadow: 0 6px 20px rgba(0,0,0,.35); } #mkFly[hidden] { display: none; } #mkFly .sw { margin: 0; }
+  #mkCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; touch-action: none; cursor: crosshair; display: none; background: #1a1a1c; } .marking #mkCanvas { display: block; } .marking main { overflow: hidden; }
+  #mkChip { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; background: rgba(26,26,29,.9); color: var(--text); border: 1px solid var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 12px; pointer-events: none; white-space: nowrap; width: max-content; } #mkChip[hidden] { display: none; }
   @container viewer (max-width: 819px) { #mkChip { left: auto; right: 8px; transform: none; } }          /* narrow: keep the status chip clear of the tool column */
-  #mkCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; touch-action: none; cursor: crosshair; display: none; } .marking #mkCanvas { display: block; }
-  #mkChip { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; background: rgba(26,26,29,.9); color: var(--text); border: 1px solid var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 12px; pointer-events: none; white-space: nowrap; } #mkChip[hidden] { display: none; }
   .marking main { box-shadow: inset 0 0 0 2px var(--accent); } .marking .bar { opacity: .35; pointer-events: none; }
   .mk-text { position: absolute; z-index: 7; background: rgba(0,0,0,.4); border: 1px dashed #fff; border-radius: 4px; font-weight: 700; padding: 0 4px; outline: none; min-width: 90px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   /* Wide enough: the angle bar leaves room for the button on the left. Narrower: the button sits above the bar instead. */
@@ -143,7 +143,9 @@
         <button class="tool" data-t="circle" data-tip="Circle" aria-label="Circle"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg></button>
         <button class="tool" data-t="arrow" data-tip="Arrow" aria-label="Arrow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6"/><path d="M9 6h9v9"/></svg></button>
         <button class="tool" data-t="text" data-tip="Text" aria-label="Text"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg></button>
-        <button class="tool" data-t="move" data-tip="Move &amp; rotate" aria-label="Move and rotate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3l7 17 2.5-7.5L21 10z"/><path d="M13 13l6 6"/></svg></button>
+        <button class="tool" data-t="move" data-tip="Move, rotate &amp; resize" aria-label="Move, rotate and resize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3l7 17 2.5-7.5L21 10z"/><path d="M13 13l6 6"/></svg></button>
+        <button class="tool" id="mkZin" data-tip="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg></button>
+        <button class="tool" id="mkZout" data-tip="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></svg></button>
         <hr class="mk-div">
         <button class="sw cur" id="mkCur" aria-haspopup="true" aria-expanded="false" data-tip="Colour" aria-label="Colour: red. Click for other colours" style="background:#ef4444"></button>
         <hr class="mk-div">
@@ -213,7 +215,8 @@ const engineId = id => CARS.find(c => c.id === id).engine || id;       // S/X ha
 let loadedPack = null, zoomDone = false;
 const DEFAULT_VIEW = 'rear_right';               // what the engine shows before any angle is picked (horizontal 45)
 let viewDirty = false;                          // the user dragged the car by hand, so the shared angle is only approximate
-let initialView = null, currentView = null;      // initialView: from ?view= or a share link; currentView: last angle picked with the buttons
+let initialView = null, currentView = null;
+let resumeSpin = false;                         // Rotate was on when annotating began: it is paused to freeze the view and restored afterwards      // initialView: from ?view= or a share link; currentView: last angle picked with the buttons
 function loadViewer() {            // (re)start the engine on the selected car's pack
   ready = false; carLoaded = false; loadedCar = null; loadedPack = packOf(car); zoomDone = false;
   $('status').classList.remove('hide'); $('fill').style.width = '0';
@@ -254,7 +257,7 @@ addEventListener('message', e => {
     ready = true; nudgeSoon(); $('statusText').textContent = `Loading ${carName(car)}…`; syncCar();
   } else if (d.type === 'car_loaded') {
     carLoaded = true; nudgeSoon(); $('status').classList.add('hide');
-    setTimeout(() => { sendPaint(); pushTexture(); send({ type: 'set_camera_auto_rotate', enabled: spinning }); if (!zoomDone) { zoomDone = true; if (initialView === 'rotate') { const d = fitDistance(); if (d > 0) send({ type: 'set_camera_angle', horizontal: 45, vertical: 15, distance: d }); setTimeout(() => send({ type: 'set_camera_auto_rotate', enabled: true }), 400); } else if (initialView) { currentView = initialView; markView(initialView); WrapCheck.camera(initialView, 300); } else { const d = fitDistance(); if (d > 0) send({ type: 'set_camera_angle', horizontal: 45, vertical: 15, distance: d }); } } }, 200);   // frame once per engine start; keeps the engine's default angle
+    setTimeout(() => { mkRefresh(1500); sendPaint(); pushTexture(); send({ type: 'set_camera_auto_rotate', enabled: spinning }); if (!zoomDone) { zoomDone = true; if (initialView === 'rotate') { const d = fitDistance(); if (d > 0) send({ type: 'set_camera_angle', horizontal: 45, vertical: 15, distance: d }); setTimeout(() => send({ type: 'set_camera_auto_rotate', enabled: true }), 400); } else if (initialView) { currentView = initialView; markView(initialView); WrapCheck.camera(initialView, 300); } else { const d = fitDistance(); if (d > 0) send({ type: 'set_camera_angle', horizontal: 45, vertical: 15, distance: d }); } } }, 200);   // frame once per engine start; keeps the engine's default angle
   } else if (d.type === 'godot_error') {
     $('statusText').textContent = 'Engine error: ' + (d.message || 'unknown');
   }
@@ -298,7 +301,7 @@ function setWrap(img) {
   x.putImageData(im, 0, 0);
   fixedTex = c.toDataURL('image/png');
   texture = fixedTex;                    // always colour-corrected for the engine
-  pushTexture();
+  pushTexture(); mkRefresh();
 }
 function loadImage(src) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
@@ -477,10 +480,21 @@ async function captureCar() { for (let n = 0; n < 4; n++) { const u = await grab
 const ICON = { pen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>', x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>' };
 ICON.edit = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>';
 const setMarkBtn = on => { const b = $('markBtn'); b.innerHTML = on ? ICON.x : ICON.edit; const t = on ? 'Done' : 'Annotate'; b.setAttribute('aria-label', on ? 'Done annotating' : 'Annotate'); b.dataset.tip = t; };
-const mk = { on: false, shapes: [], hist: [], sel: null, drag: null, tool: 'pen', color: '#ef4444', live: null, input: null, textAt: null, ready: false, img: null };
+const mk = { on: false, shapes: [], hist: [], sel: null, drag: null, tool: 'pen', color: '#ef4444', live: null, input: null, textAt: null, ready: false, img: null, z: 1, cx: .5, cy: .5, pts: new Map(), gest: null, pan: null, rt: 0 };
 const mkCanvas = $('mkCanvas'), mkCtx = mkCanvas.getContext('2d');
 const mkFontSpec = size => `700 ${size}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
 const mkU = () => mkCanvas.width / (mkCanvas.getBoundingClientRect().width || 1);     // canvas pixels per CSS pixel, so handles stay a constant on-screen size
+function mkRect() {                                           // where the frozen picture sits on the canvas: fitted to its own aspect, then zoomed and panned
+  const cw = mkCanvas.width, ch = mkCanvas.height, iw = mk.img ? mk.img.naturalWidth : cw, ih = mk.img ? mk.img.naturalHeight : ch;
+  const s = Math.min(cw / iw, ch / ih) * mk.z, w = iw * s, h = ih * s; let x = cw / 2 - mk.cx * w, y = ch / 2 - mk.cy * h;
+  x = w <= cw ? (cw - w) / 2 : Math.min(0, Math.max(cw - w, x)); y = h <= ch ? (ch - h) / 2 : Math.min(0, Math.max(ch - h, y));
+  mk.cx = (cw / 2 - x) / w; mk.cy = (ch / 2 - y) / h; return { x, y, w, h };
+}
+function mkFocus(clientX, clientY, u, v) {                    // keep the picture point (u, v) under this screen position
+  const r = mkCanvas.getBoundingClientRect(), k = mkCanvas.width / (r.width || 1), t = mkRect();
+  mk.cx = (mkCanvas.width / 2 - (clientX - r.left) * k) / t.w + u; mk.cy = (mkCanvas.height / 2 - (clientY - r.top) * k) / t.h + v;
+}
+const mkZoomTo = z => { mk.z = Math.max(1, Math.min(8, z)); mkRedraw(); };
 const mkRotPt = (cx, cy, x, y, a) => { const dx = x - cx, dy = y - cy, ca = Math.cos(a), sa = Math.sin(a); return [cx + dx * ca - dy * sa, cy + dx * sa + dy * ca]; };
 function mkBox(c, sh, W, H) {                                  // centre, size and rotation (in pixels) of a box, circle or text note
   if (sh.t === 'text') { const size = sh.size * W, lines = sh.s.split('\n'); c.save(); c.font = mkFontSpec(size); const w = Math.max(...lines.map(l => c.measureText(l).width)); c.restore(); const h = lines.length * size * 1.15; return { cx: sh.x * W + w / 2, cy: sh.y * H + h / 2, w, h, rot: sh.rot || 0 }; }
@@ -504,12 +518,17 @@ function mkDrawShape(c, sh, W, H) {
 }
 // --- selecting, moving and rotating (every shape except freehand pen strokes) ---
 function mkHandles(sh) {                                       // handle positions for the selected shape, in canvas pixels
-  const W = mkCanvas.width, H = mkCanvas.height, off = 34 * mkU();
+  const { w: W, h: H } = mkRect(), off = 34 * mkU();
   if (sh.t === 'arrow') { const x1 = sh.x1 * W, y1 = sh.y1 * H, x2 = sh.x2 * W, y2 = sh.y2 * H, cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, a = Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2; return { p1: [x1, y1], p2: [x2, y2], c: [cx, cy], rot: [cx + Math.cos(a) * off, cy + Math.sin(a) * off] }; }
-  const b = mkBox(mkCtx, sh, W, H); return { b, rot: mkRotPt(b.cx, b.cy, b.cx, b.cy - b.h / 2 - off, b.rot) };
+  const b = mkBox(mkCtx, sh, W, H), hs = {};
+  for (const k of (sh.t === 'text' ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'])) {
+    const ox = k.includes('w') ? -b.w / 2 : k.includes('e') ? b.w / 2 : 0, oy = k.includes('n') ? -b.h / 2 : k.includes('s') ? b.h / 2 : 0;
+    hs[k] = mkRotPt(b.cx, b.cy, b.cx + ox, b.cy + oy, b.rot);
+  }
+  return { b, hs, rot: mkRotPt(b.cx, b.cy, b.cx, b.cy - b.h / 2 - off, b.rot) };
 }
 function mkHit(sh, px, py, u) {
-  const W = mkCanvas.width, H = mkCanvas.height;
+  const { w: W, h: H } = mkRect();
   if (sh.t === 'arrow') { const x1 = sh.x1 * W, y1 = sh.y1 * H, x2 = sh.x2 * W, y2 = sh.y2 * H, dx = x2 - x1, dy = y2 - y1, t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy)) <= 14 * u; }
   const b = mkBox(mkCtx, sh, W, H), [lx, ly] = mkRotPt(b.cx, b.cy, px, py, -b.rot), pad = 10 * u;
   return Math.abs(lx - b.cx) <= b.w / 2 + pad && Math.abs(ly - b.cy) <= b.h / 2 + pad;
@@ -518,6 +537,7 @@ const mkPick = (px, py, u) => { for (let i = mk.shapes.length - 1; i >= 0; i--) 
 function mkGrab(sh, px, py, u) {                               // what is under the pointer on the selected shape: a handle or its body
   const h = mkHandles(sh), near = p => Math.hypot(px - p[0], py - p[1]) <= 16 * u;
   if (near(h.rot)) return { kind: 'rotate' };
+  if (h.hs) for (const k in h.hs) if (near(h.hs[k])) return { kind: 'resize', h: k };
   if (sh.t === 'arrow') { if (near(h.p1)) return { kind: 'p1' }; if (near(h.p2)) return { kind: 'p2' }; }
   return mkHit(sh, px, py, u) ? { kind: 'move' } : null;
 }
@@ -526,15 +546,18 @@ function mkDrawSel(c) {
   c.save(); c.strokeStyle = '#3b82f6'; c.fillStyle = '#fff'; c.lineWidth = Math.max(1.5, 1.5 * u); c.setLineDash(dash);
   const dot = p => { c.setLineDash([]); c.beginPath(); c.arc(p[0], p[1], 8 * u, 0, Math.PI * 2); c.fill(); c.stroke(); c.setLineDash(dash); };
   if (sh.t === 'arrow') { c.beginPath(); c.moveTo(h.p1[0], h.p1[1]); c.lineTo(h.p2[0], h.p2[1]); c.stroke(); c.beginPath(); c.moveTo(h.c[0], h.c[1]); c.lineTo(h.rot[0], h.rot[1]); c.stroke(); dot(h.p1); dot(h.p2); dot(h.rot); }
-  else { const b = h.b, pad = 6 * u; c.save(); c.translate(b.cx, b.cy); c.rotate(b.rot); c.strokeRect(-b.w / 2 - pad, -b.h / 2 - pad, b.w + 2 * pad, b.h + 2 * pad); c.setLineDash([]); c.beginPath(); c.moveTo(0, -b.h / 2 - pad); c.lineTo(0, -b.h / 2 - 34 * u); c.stroke(); c.restore(); dot(h.rot); }
+  else { const b = h.b, pad = 6 * u; c.save(); c.translate(b.cx, b.cy); c.rotate(b.rot); c.strokeRect(-b.w / 2 - pad, -b.h / 2 - pad, b.w + 2 * pad, b.h + 2 * pad); c.setLineDash([]); c.beginPath(); c.moveTo(0, -b.h / 2 - pad); c.lineTo(0, -b.h / 2 - 34 * u); c.stroke(); c.restore(); dot(h.rot); c.setLineDash([]); for (const k in h.hs) { c.beginPath(); c.rect(h.hs[k][0] - 6 * u, h.hs[k][1] - 6 * u, 12 * u, 12 * u); c.fill(); c.stroke(); } }
   c.restore();
 }
 function mkRedraw() {
-  const W = mkCanvas.width, H = mkCanvas.height; mkCtx.clearRect(0, 0, W, H); if (mk.img) mkCtx.drawImage(mk.img, 0, 0, W, H);      // the frozen picture, then the marks
-  mk.shapes.forEach(s => mkDrawShape(mkCtx, s, W, H)); if (mk.live) mkDrawShape(mkCtx, mk.live, W, H); if (mk.on) mkDrawSel(mkCtx);
+  const t = mkRect(), c = mkCtx; c.clearRect(0, 0, mkCanvas.width, mkCanvas.height); c.imageSmoothingQuality = 'high';
+  if (mk.img) c.drawImage(mk.img, t.x, t.y, t.w, t.h);       // the frozen picture, then the marks, both inside the same rectangle
+  c.save(); c.beginPath(); c.rect(t.x, t.y, t.w, t.h); c.clip(); c.translate(t.x, t.y);
+  mk.shapes.forEach(sh => mkDrawShape(c, sh, t.w, t.h)); if (mk.live) mkDrawShape(c, mk.live, t.w, t.h); c.restore();
+  if (mk.on) { c.save(); c.translate(t.x, t.y); mkDrawSel(c); c.restore(); }
 }
 function mkSize() { const r = mkCanvas.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1); if (r.width) { mkCanvas.width = Math.round(r.width * dpr); mkCanvas.height = Math.round(r.height * dpr); mkRedraw(); } }
-const mkPos = e => { const r = mkCanvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+const mkPos = e => { const r = mkCanvas.getBoundingClientRect(), k = mkCanvas.width / (r.width || 1), t = mkRect(); return [((e.clientX - r.left) * k - t.x) / t.w, ((e.clientY - r.top) * k - t.y) / t.h]; };
 const mkSay = t => { if (!t) return; const chip = $('mkChip'); chip.hidden = false; chip.textContent = t; clearTimeout(mk.chipT); mk.chipT = setTimeout(() => { if (mk.on) chip.textContent = 'View frozen · draw on the car'; }, 2600); };
 const mkPushHist = () => { mk.hist.push(JSON.stringify(mk.shapes)); if (mk.hist.length > 100) mk.hist.shift(); };
 function mkCommitText() {
@@ -544,21 +567,32 @@ function mkCommitText() {
 function mkPlaceText() {                                     // click to place, type, Enter to finish
   const [x, y] = mk.textAt; mk.textAt = null; const cr = mkCanvas.getBoundingClientRect(), mr = $('mkCanvas').parentElement.getBoundingClientRect();
   const inp = document.createElement('input'); inp.className = 'mk-text'; inp.placeholder = 'Type a note'; inp._x = x; inp._y = y; inp._c = mk.color;
-  inp.style.left = (cr.left - mr.left + x * cr.width) + 'px'; inp.style.top = (cr.top - mr.top + y * cr.height) + 'px'; inp.style.fontSize = Math.round(0.034 * cr.width) + 'px'; inp.style.color = mk.color;
+  const k = cr.width / mkCanvas.width, t = mkRect(); inp.style.left = (cr.left - mr.left + (t.x + x * t.w) * k) + 'px'; inp.style.top = (cr.top - mr.top + (t.y + y * t.h) * k) + 'px'; inp.style.fontSize = Math.round(0.034 * t.w * k) + 'px'; inp.style.color = mk.color;
   mk.input = inp; $('mkCanvas').parentElement.appendChild(inp); inp.focus();
   inp.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); mkCommitText(); } else if (ev.key === 'Escape') { ev.stopPropagation(); mk.input = null; inp.remove(); } };
 }
+function mkResumeSpin() {                                  // put Rotate back exactly as it was
+  if (!resumeSpin) return; resumeSpin = false; spinning = true; currentView = 'rotate'; $('spin').classList.add('on'); send({ type: 'set_camera_auto_rotate', enabled: true });
+}
+function mkRefresh(delay = 700) {                           // the wrap (or car) changed while frozen: re-photograph the engine at the same camera, keep the marks
+  if (!mk.on || !mk.ready) return; const t = ++mk.rt; mkSay('Updating…');
+  setTimeout(async () => {
+    if (!mk.on || t !== mk.rt) return; const u = await captureCar(); if (!u || !mk.on || t !== mk.rt) return;
+    const img = await loadImage(u); if (!mk.on || t !== mk.rt) return; mk.img = img; mkRedraw(); mkSay('Wrap updated');
+  }, delay);
+}
 async function startMarkup() {                               // freeze instantly: grab the current frame and draw on that picture
-  if (mk.on) return; mk.on = true; mk.ready = false; mk.shapes = []; mk.hist = []; mk.sel = null; mk.drag = null; mk.live = null;
-  spinning = false; $('spin').classList.remove('on'); send({ type: 'set_camera_auto_rotate', enabled: false });
+  if (mk.on) return; mk.on = true; mk.ready = false; mk.shapes = []; mk.hist = []; mk.sel = null; mk.drag = null; mk.live = null; mk.z = 1; mk.cx = mk.cy = .5; mk.pts.clear(); mk.gest = mk.pan = null;
+  const fr = frame.getBoundingClientRect(); frame.style.cssText = `inset:auto;left:0;top:0;width:${fr.width}px;height:${fr.height}px`;      // the engine keeps this size while frozen, so a re-capture lines up with the marks
+  resumeSpin = spinning; spinning = false; $('spin').classList.remove('on'); send({ type: 'set_camera_auto_rotate', enabled: false });
   const url = await captureCar(); if (!mk.on) return;
-  if (!url) { mk.on = false; alert('Could not capture the 3D view in this browser.'); return; }
+  if (!url) { mk.on = false; alert('Could not capture the 3D view in this browser.'); frame.style.cssText = ''; mkResumeSpin(); return; }
   mk.img = await loadImage(url); if (!mk.on) return;
   document.body.classList.add('marking'); $('mkPanel').hidden = false; setMarkBtn(true); $('mkChip').hidden = false; $('mkChip').textContent = 'View frozen · draw on the car';
   mkSize(); mk.ready = true; mkCursor(-1, -1);
   $('mkShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([], 'a.png', { type: 'image/png' })] }));
 }
-function stopMarkup() { mkCloseFly(); mkCommitText(); mk.on = false; mk.ready = false; mk.live = null; mk.drag = null; mk.sel = null; mk.img = null; document.body.classList.remove('marking'); $('mkPanel').hidden = true; setMarkBtn(false); $('mkChip').hidden = true; mkCtx.clearRect(0, 0, mkCanvas.width, mkCanvas.height); }
+function stopMarkup() { const wasOn = mk.on; mkCloseFly(); mkCommitText(); mk.on = false; mk.ready = false; mk.live = null; mk.drag = null; mk.sel = null; mk.img = null; mk.gest = mk.pan = null; mk.pts.clear(); frame.style.cssText = ''; nudgeSoon(); document.body.classList.remove('marking'); $('mkPanel').hidden = true; setMarkBtn(false); $('mkChip').hidden = true; mkCtx.clearRect(0, 0, mkCanvas.width, mkCanvas.height); if (wasOn) mkResumeSpin(); }
 $('markBtn').onclick = () => (mk.on ? stopMarkup() : startMarkup());
 async function mkRender() {                                  // full-size picture: the very frame you marked, plus the marks (no selection handles)
   mkCommitText(); if (!mk.img) { mkSay('Nothing to export yet.'); return null; }
@@ -567,15 +601,28 @@ async function mkRender() {                                  // full-size pictur
 }
 const mkName = () => `wrapcheck-${car}-markup.png`;
 function mkStartDrag(act, e, x, y) {
-  mkCanvas.setPointerCapture(e.pointerId); const W = mkCanvas.width, H = mkCanvas.height, o = JSON.parse(JSON.stringify(mk.sel));
-  mk.drag = { kind: act.kind, x0: x, y0: y, orig: o, before: JSON.stringify(mk.shapes), moved: false };
+  mkCanvas.setPointerCapture(e.pointerId); const { w: W, h: H } = mkRect(), o = JSON.parse(JSON.stringify(mk.sel));
+  mk.drag = { kind: act.kind, h: act.h, x0: x, y0: y, orig: o, before: JSON.stringify(mk.shapes), moved: false };
   if (act.kind === 'rotate' && o.t === 'arrow') mk.drag.a0 = Math.atan2(y * H - (o.y1 + o.y2) / 2 * H, x * W - (o.x1 + o.x2) / 2 * W);
 }
-function mkDragTo(x, y) {
-  const d = mk.drag, sh = mk.sel, o = d.orig, W = mkCanvas.width, H = mkCanvas.height, px = x * W, py = y * H;
+function mkDragTo(x, y, shift) {
+  const d = mk.drag, sh = mk.sel, o = d.orig, { w: W, h: H } = mkRect(), px = x * W, py = y * H;
   if (!d.moved) { if (Math.hypot((x - d.x0) * W, (y - d.y0) * H) < 3 * mkU()) return; d.moved = true; mk.hist.push(d.before); if (mk.hist.length > 100) mk.hist.shift(); }
   if (d.kind === 'move') { const dx = x - d.x0, dy = y - d.y0; if (sh.t === 'arrow') { sh.x1 = o.x1 + dx; sh.y1 = o.y1 + dy; sh.x2 = o.x2 + dx; sh.y2 = o.y2 + dy; } else { sh.x = o.x + dx; sh.y = o.y + dy; } }
   else if (d.kind === 'p1') { sh.x1 = x; sh.y1 = y; } else if (d.kind === 'p2') { sh.x2 = x; sh.y2 = y; }
+  else if (d.kind === 'resize') {
+    const ob = mkBox(mkCtx, o, W, H), [lx, ly] = mkRotPt(ob.cx, ob.cy, px, py, -ob.rot), dx = lx - ob.cx, dy = ly - ob.cy, k = d.h, min = 12 * mkU();
+    const hasW = k.includes('w'), hasE = k.includes('e'), hasN = k.includes('n'), hasS = k.includes('s'); let L = -ob.w / 2, R = ob.w / 2, T = -ob.h / 2, B = ob.h / 2, nw, nh;
+    if (sh.t === 'text') {                                     // proportional: the font scales with the box and the opposite corner stays put
+      const fx = hasE ? (dx - L) / ob.w : (R - dx) / ob.w, fy = hasS ? (dy - T) / ob.h : (B - dy) / ob.h, f = Math.max(0.15, Math.min(8, (fx + fy) / 2));
+      nw = ob.w * f; nh = ob.h * f; if (hasE) R = L + nw; else L = R - nw; if (hasS) B = T + nh; else T = B - nh; sh.size = Math.max(0.01, Math.min(0.3, o.size * f));
+    } else {
+      if (hasW) L = Math.min(dx, R - min); if (hasE) R = Math.max(dx, L + min); if (hasN) T = Math.min(dy, B - min); if (hasS) B = Math.max(dy, T + min);
+      if (shift && k.length === 2) { nw = R - L; nh = B - T; if (nw / ob.w > nh / ob.h) nh = nw * ob.h / ob.w; else nw = nh * ob.w / ob.h; if (hasE) R = L + nw; else L = R - nw; if (hasS) B = T + nh; else T = B - nh; }
+      nw = R - L; nh = B - T; sh.w = nw / W; sh.h = nh / H;
+    }
+    const [ncx, ncy] = mkRotPt(ob.cx, ob.cy, ob.cx + (L + R) / 2, ob.cy + (T + B) / 2, ob.rot); sh.x = (ncx - nw / 2) / W; sh.y = (ncy - nh / 2) / H;
+  }
   else if (d.kind === 'rotate') {
     if (sh.t === 'arrow') { const cx = (o.x1 + o.x2) / 2 * W, cy = (o.y1 + o.y2) / 2 * H, da = Math.atan2(py - cy, px - cx) - d.a0, r1 = mkRotPt(cx, cy, o.x1 * W, o.y1 * H, da), r2 = mkRotPt(cx, cy, o.x2 * W, o.y2 * H, da); sh.x1 = r1[0] / W; sh.y1 = r1[1] / H; sh.x2 = r2[0] / W; sh.y2 = r2[1] / H; }
     else { const b = mkBox(mkCtx, o, W, H); let a = Math.atan2(py - b.cy, px - b.cx) + Math.PI / 2; const step = Math.PI / 12, n = Math.round(a / step) * step; if (Math.abs(a - n) < 0.06) a = n; sh.rot = a; }   // snaps to 15 degrees
@@ -583,21 +630,31 @@ function mkDragTo(x, y) {
   mkRedraw();
 }
 function mkCursor(x, y) {                                    // tell the user what a press would do
-  let cur = mk.tool === 'move' ? 'default' : 'crosshair';
-  if (x >= 0) { const W = mkCanvas.width, H = mkCanvas.height, px = x * W, py = y * H, u = mkU(), g = mk.sel && mkGrab(mk.sel, px, py, u); if (g) cur = g.kind === 'move' ? 'move' : 'grab'; else if (mk.tool === 'move' && mkPick(px, py, u)) cur = 'move'; }
+  let cur = mk.tool === 'move' ? 'grab' : 'crosshair';
+  if (x >= 0) { const { w: W, h: H } = mkRect(), px = x * W, py = y * H, u = mkU(), g = mk.sel && mkGrab(mk.sel, px, py, u); if (g) { if (g.kind === 'resize') { const hs = mkHandles(mk.sel).hs, b = mkBox(mkCtx, mk.sel, W, H), a = (Math.atan2(hs[g.h][1] - b.cy, hs[g.h][0] - b.cx) * 180 / Math.PI + 360) % 180; cur = a < 22.5 || a >= 157.5 ? 'ew-resize' : a < 67.5 ? 'nwse-resize' : a < 112.5 ? 'ns-resize' : 'nesw-resize'; } else cur = g.kind === 'move' ? 'move' : 'grab'; } else if (mk.tool === 'move' && mkPick(px, py, u)) cur = 'move'; }
   mkCanvas.style.cursor = cur;
 }
 mkCanvas.addEventListener('pointerdown', e => {
-  if (!mk.ready || e.button > 0) return; mkCommitText(); const [x, y] = mkPos(e), W = mkCanvas.width, H = mkCanvas.height, px = x * W, py = y * H, u = mkU();
+  if (!mk.ready) return; mk.pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (mk.pts.size === 2) { mkBeginGesture(); return; } if (mk.pts.size > 2 || e.button > 0) return; mkCommitText(); const [x, y] = mkPos(e), { w: W, h: H } = mkRect(), px = x * W, py = y * H, u = mkU();
   if (mk.sel) { const act = mkGrab(mk.sel, px, py, u); if (act) { mkStartDrag(act, e, x, y); e.preventDefault(); return; } }      // handles and body of the selected shape work with any tool
-  if (mk.tool === 'move') { mk.sel = mkPick(px, py, u); mkRedraw(); if (mk.sel) { mkStartDrag({ kind: 'move' }, e, x, y); e.preventDefault(); } return; }
+  if (mk.tool === 'move') { mk.sel = mkPick(px, py, u); mkRedraw(); if (mk.sel) { mkStartDrag({ kind: 'move' }, e, x, y); e.preventDefault(); } else { mkCanvas.setPointerCapture(e.pointerId); mk.pan = { x: e.clientX, y: e.clientY, cx: mk.cx, cy: mk.cy }; mkCanvas.style.cursor = 'grabbing'; e.preventDefault(); } return; }
   if (mk.sel) { mk.sel = null; mkRedraw(); }
   if (mk.tool === 'text') { mk.textAt = [x, y]; e.preventDefault(); return; }       // the note box is created on release so it keeps focus
   mkCanvas.setPointerCapture(e.pointerId);
   mk.live = mk.tool === 'pen' ? { t: 'pen', pts: [[x, y]], c: mk.color } : (mk.tool === 'box' || mk.tool === 'circle') ? { t: mk.tool === 'box' ? 'box' : 'ellipse', x, y, w: 0, h: 0, c: mk.color, x0: x, y0: y } : { t: 'arrow', x1: x, y1: y, x2: x, y2: y, c: mk.color };
 });
+function mkBeginGesture() {                                 // second finger down: pinch to zoom, drag to pan, and abandon whatever one finger had started
+  if (mk.drag && mk.drag.moved) { mk.shapes = JSON.parse(mk.drag.before); mk.hist.pop(); mk.sel = null; }
+  mk.live = null; mk.drag = null; mk.pan = null; mk.textAt = null;
+  const [a, b] = [...mk.pts.values()], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, r = mkCanvas.getBoundingClientRect(), k = mkCanvas.width / (r.width || 1), t = mkRect();
+  mk.gest = { d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, z0: mk.z, u: ((mx - r.left) * k - t.x) / t.w, v: ((my - r.top) * k - t.y) / t.h }; mkRedraw();
+}
 mkCanvas.addEventListener('pointermove', e => {
-  const [x, y] = mkPos(e); if (mk.drag) { mkDragTo(x, y); return; }
+  if (mk.pts.has(e.pointerId)) mk.pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (mk.gest) { if (mk.pts.size < 2) return; const [a, b] = [...mk.pts.values()]; mk.z = Math.max(1, Math.min(8, mk.gest.z0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / mk.gest.d0)); mkFocus((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, mk.gest.u, mk.gest.v); mkRedraw(); return; }
+  if (mk.pan) { const r = mkCanvas.getBoundingClientRect(), k = mkCanvas.width / (r.width || 1), t = mkRect(); mk.cx = mk.pan.cx - (e.clientX - mk.pan.x) * k / t.w; mk.cy = mk.pan.cy - (e.clientY - mk.pan.y) * k / t.h; mkRedraw(); return; }
+  const [x, y] = mkPos(e); if (mk.drag) { mkDragTo(x, y, e.shiftKey); return; }
   const l = mk.live; if (!l) { if (e.pointerType !== 'touch') mkCursor(x, y); return; }
   if (l.t === 'pen') l.pts.push([x, y]); else if (l.t === 'box' || l.t === 'ellipse') { l.x = Math.min(l.x0, x); l.y = Math.min(l.y0, y); l.w = Math.abs(x - l.x0); l.h = Math.abs(y - l.y0); } else { l.x2 = x; l.y2 = y; }
   mkRedraw();
@@ -605,11 +662,19 @@ mkCanvas.addEventListener('pointermove', e => {
 const mkEnd = () => {
   if (mk.drag) { mk.drag = null; mkRedraw(); return; }
   if (mk.textAt) { mkPlaceText(); return; } const l = mk.live; if (!l) return; mk.live = null;
-  const big = l.t === 'pen' ? l.pts.length > 2 : (l.t === 'box' || l.t === 'ellipse') ? l.w > 0.01 && l.h > 0.01 : Math.hypot((l.x2 - l.x1) * mkCanvas.width, (l.y2 - l.y1) * mkCanvas.height) > 12;
+  const big = l.t === 'pen' ? l.pts.length > 2 : (l.t === 'box' || l.t === 'ellipse') ? l.w > 0.01 && l.h > 0.01 : Math.hypot((l.x2 - l.x1) * mkRect().w, (l.y2 - l.y1) * mkRect().h) > 12 * mkU();
   if (big) { mkPushHist(); mk.shapes.push(l); if (l.t !== 'pen') mk.sel = l; }       // a new shape is selected so you can adjust it straight away
   mkRedraw();
 };
-mkCanvas.addEventListener('pointerup', mkEnd); mkCanvas.addEventListener('pointercancel', mkEnd);
+const mkUp = e => {
+  mk.pts.delete(e.pointerId);
+  if (mk.gest) { if (mk.pts.size < 2) mk.gest = null; return; }
+  if (mk.pan) { mk.pan = null; mkCursor(-1, -1); return; }
+  mkEnd();
+};
+mkCanvas.addEventListener('pointerup', mkUp); mkCanvas.addEventListener('pointercancel', mkUp);
+mkCanvas.addEventListener('wheel', e => { if (!mk.ready) return; e.preventDefault(); const [u, v] = mkPos(e); mk.z = Math.max(1, Math.min(8, mk.z * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)))); mkFocus(e.clientX, e.clientY, u, v); mkRedraw(); }, { passive: false });
+$('mkZin').onclick = () => mkZoomTo(mk.z * 1.4); $('mkZout').onclick = () => mkZoomTo(mk.z / 1.4);
 document.querySelectorAll('#mkPanel .tool[data-t]').forEach(b => b.onclick = () => { mkCommitText(); mk.tool = b.dataset.t; document.querySelectorAll('#mkPanel .tool[data-t]').forEach(x => x.classList.toggle('on', x === b)); mkCursor(-1, -1); });
 const MK_COLORS = [['#ef4444', 'red'], ['#facc15', 'yellow'], ['#22c55e', 'green'], ['#3b82f6', 'blue'], ['#ffffff', 'white']];
 const mkTip = $('mkTip'); let tipTimer = null, swallowClick = false, tipMute = null;       // swallowClick: a long-press that showed a tooltip must not also press the button
@@ -651,6 +716,7 @@ addEventListener('keydown', e => {
   if (!mk.on) return; const typing = document.activeElement && document.activeElement.tagName === 'INPUT';
   if (e.key === 'Escape') { if (!mkFly.hidden) mkCloseFly(); else if (mk.sel) { mk.sel = null; mkRedraw(); } else stopMarkup(); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && mk.sel && !typing) { e.preventDefault(); mkPushHist(); mk.shapes = mk.shapes.filter(s => s !== mk.sel); mk.sel = null; mkRedraw(); }
+  else if ((e.key === '+' || e.key === '=') && !typing) mkZoomTo(mk.z * 1.4); else if ((e.key === '-' || e.key === '_') && !typing) mkZoomTo(mk.z / 1.4); else if (e.key === '0' && !typing) { mk.cx = mk.cy = .5; mkZoomTo(1); }
   else if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !typing) { e.preventDefault(); $('mkUndo').click(); }
 });
 const syncCtl = () => { const h = Math.min(56, $('bar').offsetHeight); if (h) document.documentElement.style.setProperty('--ctl-h', h + 'px'); };      // matches the bar; capped when it wraps to two rows
