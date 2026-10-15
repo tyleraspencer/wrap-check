@@ -496,10 +496,12 @@ const mk = { on: false, shapes: [], hist: [], sel: null, drag: null, tool: 'pen'
 const mkCanvas = $('mkCanvas'), mkCtx = mkCanvas.getContext('2d');
 const mkFontSpec = size => `700 ${size}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
 const mkU = () => mkCanvas.width / (mkCanvas.getBoundingClientRect().width || 1);     // canvas pixels per CSS pixel, so handles stay a constant on-screen size
-function mkRect() {                                           // where the frozen picture sits on the canvas: fitted to its own aspect, then zoomed and panned
-  const cw = mkCanvas.width, ch = mkCanvas.height, iw = mk.img ? mk.img.width : cw, ih = mk.img ? mk.img.height : ch;
+const mkGeom = i => (i && i._g) || { u0: 0, v0: 0, du: 1, dv: 1 };      // where a picture sits in frame units: the frozen frame is 0..1; a wider capture reaches beyond it
+function mkRect() {                                           // where the frozen frame sits on the canvas: fitted to its own aspect, then zoomed and panned
+  const cw = mkCanvas.width, ch = mkCanvas.height, iw = mk.bw || cw, ih = mk.bh || ch, g = mkGeom(mk.img);
   const s = Math.min(cw / iw, ch / ih) * mk.z, w = iw * s, h = ih * s; let x = cw / 2 - mk.cx * w, y = ch / 2 - mk.cy * h;
-  x = w <= cw ? (cw - w) / 2 : Math.min(0, Math.max(cw - w, x)); y = h <= ch ? (ch - h) / 2 : Math.min(0, Math.max(ch - h, y));
+  const cl = (p, size, lim, u0, du) => du * size <= lim ? (lim - du * size) / 2 - u0 * size : Math.min(-u0 * size, Math.max(lim - (u0 + du) * size, p));      // keep the picture (not just the frame) covering the view
+  x = cl(x, w, cw, g.u0, g.du); y = cl(y, h, ch, g.v0, g.dv);
   mk.cx = (cw / 2 - x) / w; mk.cy = (ch / 2 - y) / h; return { x, y, w, h };
 }
 function mkFocus(clientX, clientY, u, v) {                    // keep the picture point (u, v) under this screen position
@@ -563,8 +565,9 @@ function mkDrawSel(c) {
 }
 function mkRedraw() {
   const t = mkRect(), c = mkCtx; c.clearRect(0, 0, mkCanvas.width, mkCanvas.height); c.imageSmoothingQuality = 'high';
-  if (mk.img) { if (mk.fade) { c.drawImage(mk.fade.from, t.x, t.y, t.w, t.h); c.globalAlpha = mk.fade.a; } c.drawImage(mk.img, t.x, t.y, t.w, t.h); c.globalAlpha = 1; }       // the frozen picture (crossfading from the previous one), then the marks, both inside the same rectangle
-  c.save(); c.beginPath(); c.rect(t.x, t.y, t.w, t.h); c.clip(); c.translate(t.x, t.y);
+  const put = im => { const g = mkGeom(im); c.drawImage(im, t.x + g.u0 * t.w, t.y + g.v0 * t.h, g.du * t.w, g.dv * t.h); }, gi = mkGeom(mk.img);
+  if (mk.img) { if (mk.fade) { put(mk.fade.from); c.globalAlpha = mk.fade.a; } put(mk.img); c.globalAlpha = 1; }       // the frozen picture (crossfading from the previous one), then the marks, both inside the same rectangle
+  c.save(); c.beginPath(); c.rect(t.x + gi.u0 * t.w, t.y + gi.v0 * t.h, gi.du * t.w, gi.dv * t.h); c.clip(); c.translate(t.x, t.y);
   mk.shapes.forEach(sh => mkDrawShape(c, sh, t.w, t.h)); if (mk.live) mkDrawShape(c, mk.live, t.w, t.h); c.restore();
   if (mk.on) { c.save(); c.translate(t.x, t.y); mkDrawSel(c); c.restore(); }
 }
@@ -605,27 +608,49 @@ function mkSwap(img, after) {                                 // put a new pictu
   }));
 }
 const mkEngine = () => { try { return frame.contentWindow.document.getElementById('canvas'); } catch { return null; } };
-function mkEngineSize(k) {                                    // k × the freeze-time size: above 1 renders sharper for a capture, below 1 lets the engine idle cheaply while frozen
-  frame.style.cssText = `inset:auto;left:0;top:0;width:${mk.fw * k}px;height:${mk.fh * k}px` + (k > 1 ? `;transform:scale(${1 / k});transform-origin:0 0` : ''); nudgeSoon();
+function mkEngineSize(k, e = 1) {                                    // k × the freeze-time size: above 1 renders sharper for a capture, below 1 lets the engine idle cheaply while frozen
+  frame.style.cssText = `inset:auto;left:0;top:0;width:${mk.fw * k * e}px;height:${mk.fh * k}px` + (k > 1 ? `;transform:scale(${1 / k});transform-origin:0 0` : ''); nudgeSoon();
 }
-async function mkShoot(t, S) {                                // render the engine at S× for one capture, then idle it small again (it shares a thread with the page)
-  const cv = mkEngine(); if (!cv) return null; mkEngineSize(S);
-  const want = mk.fw * S * mk.ratio * 0.9, t0 = Date.now();
+async function mkShoot(t, S, E = 1) {                                // render the engine at S× for one capture, then idle it small again (it shares a thread with the page)
+  const cv = mkEngine(); if (!cv) return null; mkEngineSize(S, E);
+  const want = mk.fw * S * E * mk.ratio * 0.9, t0 = Date.now();
   while (cv.width < want && Date.now() - t0 < 2500) { await sleep(100); if (!mk.on || t !== mk.rt) return null; }
   await sleep(250); if (!mk.on || t !== mk.rt) return null;
   const img = await captureCarCopy(); if (mk.on && t === mk.rt) mkEngineSize(0.25); return img;
 }
+function mkBleeds(img) {                                      // does the car run off the left or right edge of the frozen frame?
+  const w = 240, h = Math.max(8, Math.round(w * img.height / img.width)), c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, w, h);
+  const bg = x.getImageData(1, 1, 1, 1).data, e = [x.getImageData(0, 0, 2, h).data, x.getImageData(w - 2, 0, 2, h).data]; let n = 0;
+  for (const d of e) for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 40) n++; return n > 6;
+}
+async function mkRegister(ext) {                              // line a wider capture up with the frozen frame (the engine scales the car a touch differently at other widths)
+  const bw = mk.bw, bh = mk.bh, Nw = 160, Nh = Math.max(8, Math.round(Nw * bh / bw)), mkc = () => { const c = document.createElement('canvas'); c.width = Nw; c.height = Nh; return c; };
+  const bx = mkc().getContext('2d', { willReadFrequently: true }), tx = mkc().getContext('2d'); bx.drawImage(mk.img, 0, 0, Nw, Nh); const B = bx.getImageData(0, 0, Nw, Nh).data, k0 = ext.height / bh; let n = 0;
+  const score = (d, o) => {
+    const k = k0 * d, sw = bw * k, sh = bh * k; tx.clearRect(0, 0, Nw, Nh); tx.fillStyle = '#f0f'; tx.fillRect(0, 0, Nw, Nh); tx.drawImage(ext, ext.width / 2 - sw / 2, ext.height / 2 + o - sh / 2, sw, sh, 0, 0, Nw, Nh);
+    const T = tx.getImageData(0, 0, Nw, Nh).data; let e = 0; for (let i = 0; i < B.length; i += 4) e += Math.abs(B[i] - T[i]) + Math.abs(B[i + 1] - T[i + 1]) + Math.abs(B[i + 2] - T[i + 2]); return e / (Nw * Nh * 3);
+  };
+  let best = { d: 1, o: 0, e: 1e9 };
+  const sweep = async (d0, dd, nd, o0, oo, no) => { for (let i = -nd; i <= nd; i++) for (let j = -no; j <= no; j++) { const d = d0 + i * dd, o = o0 + j * oo, e = score(d, o); if (e < best.e) best = { d, o, e }; if (++n % 12 === 0) await new Promise(r => setTimeout(r, 0)); } };
+  await sweep(1.03, 0.012, 7, 0, 0.01 * ext.height, 4); await sweep(best.d, 0.003, 4, best.o, 0.0025 * ext.height, 4); await sweep(best.d, 0.001, 3, best.o, 0.0007 * ext.height, 3);
+  if (best.e > 9) return null; const k = k0 * best.d;
+  return { u0: 0.5 - ext.width / 2 / (k * bw), du: ext.width / (k * bw), v0: 0.5 - (ext.height / 2 + best.o) / (k * bh), dv: ext.height / (k * bh), err: +best.e.toFixed(2) };
+}
 async function mkSharpen() {                                  // after the instant freeze: re-photograph the engine larger (same framing) and fade in the sharper picture
   const t = ++mk.rt, cv = mkEngine(); if (!cv || !mk.fw) return;
-  const S = Math.min(3, 2800 / Math.max(cv.width, cv.height)); if (S < 1.25) { mkEngineSize(0.25); return; } mk.S = S;
-  const img = await mkShoot(t, S); if (!img || !mk.on || t !== mk.rt) return;
-  if (Math.abs(img.width / img.height - mk.img.width / mk.img.height) > 0.01) return; mkSwap(img);
+  const bleed = mkBleeds(mk.img); let E = 1, S = Math.min(3, 2800 / Math.max(cv.width, cv.height));
+  if (bleed) for (const e of [3, 2.4, 1.8]) { E = e; S = Math.min(3, 4096 / (cv.width * e), 2800 / cv.height); if (S >= 1.15) break; }       // the car runs off the edge: capture a wider view so zooming out shows all of it
+  if (!bleed && S < 1.25) { mkEngineSize(0.25); return; } S = Math.max(1, S); mk.S = S; mk.E = E;
+  const img = await mkShoot(t, S, E); if (!img || !mk.on || t !== mk.rt) return;
+  if (E === 1) { if (Math.abs(img.width / img.height - mk.bw / mk.bh) > 0.01) return; mkSwap(img); return; }
+  const g = await mkRegister(img); if (!mk.on || t !== mk.rt) return; if (!g) { mk.E = 1; return; }       // could not line it up: keep the plain picture
+  img._g = g; mk.map = g; mkSwap(img);
 }
 function mkRefresh(delay = 700) {                           // the wrap (or car) changed while frozen: re-photograph the engine at the same camera, keep the marks
   if (!mk.on || !mk.ready) return; const t = ++mk.rt; mkSay('Updating…');
   setTimeout(async () => {
-    if (!mk.on || t !== mk.rt) return; const img = await mkShoot(t, mk.S || 1); if (!img || !mk.on || t !== mk.rt) return;
-    if (Math.abs(img.width / img.height - mk.img.width / mk.img.height) > 0.01) return; mkSwap(img, () => mkSay('Wrap updated'));
+    if (!mk.on || t !== mk.rt) return; const E = mk.E > 1 && mk.map ? mk.E : 1, img = await mkShoot(t, mk.S || 1, E); if (!img || !mk.on || t !== mk.rt) return;
+    if (E > 1) img._g = mk.map; else if (Math.abs(img.width / img.height - mk.bw / mk.bh) > 0.01) return; mkSwap(img, () => mkSay('Wrap updated'));
   }, delay);
 }
 async function startMarkup() {                               // freeze instantly: grab the current frame and draw on that picture
@@ -635,7 +660,7 @@ async function startMarkup() {                               // freeze instantly
   setMarkBtn(true);
   const img = await captureSettled(); if (!mk.on) return;       // the engine coasts for a few frames after the stop message; freeze on its resting frame, so nothing shifts afterwards
   if (!img) { mk.on = false; alert('Could not capture the 3D view in this browser.'); frame.style.cssText = ''; setMarkBtn(false); mkResumeSpin(); return; }
-  mk.img = img;
+  mk.img = img; mk.bw = img.width; mk.bh = img.height; mk.E = 1; mk.map = null;
   document.body.classList.add('marking'); $('mkPanel').hidden = false; setMarkBtn(true); $('mkChip').hidden = false; $('mkChip').textContent = 'View frozen · draw on the car';
   mkBackdrop(); mkSize(); mk.ready = true; mkCursor(-1, -1); mkSharpen();
   $('mkShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([], 'a.png', { type: 'image/png' })] }));
@@ -661,10 +686,19 @@ function stopMarkup() {
   });
 }
 $('markBtn').onclick = () => (mk.on ? stopMarkup() : mk.pending ? (mk.cancel = !mk.cancel) : startMarkup());
-async function mkRender() {                                  // full-size picture: the very frame you marked, plus the marks (no selection handles)
+function mkShapeBounds(c, sh, W, H) {                         // [x0, y0, x1, y1] of a mark, in frame units
+  let pts;
+  if (sh.t === 'pen') pts = sh.pts; else if (sh.t === 'arrow') pts = [[sh.x1, sh.y1], [sh.x2, sh.y2]];
+  else { const b = mkBox(c, sh, W, H); pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(q => { const r = mkRotPt(b.cx, b.cy, b.cx + q[0] * b.w / 2, b.cy + q[1] * b.h / 2, b.rot); return [r[0] / W, r[1] / H]; }); }
+  return [Math.min(...pts.map(q => q[0])), Math.min(...pts.map(q => q[1])), Math.max(...pts.map(q => q[0])), Math.max(...pts.map(q => q[1]))];
+}
+async function mkRender() {                                  // the frame you froze, plus the marks; grows to include marks that run outside it onto the rest of the car
   mkCommitText(); if (!mk.img) { mkSay('Nothing to export yet.'); return null; }
-  const c = document.createElement('canvas'); c.width = mk.img.width; c.height = mk.img.height;
-  const x = c.getContext('2d'); x.drawImage(mk.img, 0, 0); mk.shapes.forEach(sh => mkDrawShape(x, sh, c.width, c.height)); return new Promise(r => c.toBlob(r, 'image/png'));
+  const g = mkGeom(mk.img), pw = mk.img.width / g.du, ph = mk.img.height / g.dv; let [x0, y0, x1, y1] = [0, 0, 1, 1]; const tmp = document.createElement('canvas').getContext('2d');
+  for (const sh of mk.shapes) { const b = mkShapeBounds(tmp, sh, pw, ph), pad = 0.012; x0 = Math.min(x0, b[0] - pad); y0 = Math.min(y0, b[1] - pad); x1 = Math.max(x1, b[2] + pad); y1 = Math.max(y1, b[3] + pad); }
+  x0 = Math.max(x0, g.u0); y0 = Math.max(y0, g.v0); x1 = Math.min(x1, g.u0 + g.du); y1 = Math.min(y1, g.v0 + g.dv);
+  const c = document.createElement('canvas'); c.width = Math.max(1, Math.round((x1 - x0) * pw)); c.height = Math.max(1, Math.round((y1 - y0) * ph));
+  const x = c.getContext('2d'); x.translate(-x0 * pw, -y0 * ph); x.drawImage(mk.img, g.u0 * pw, g.v0 * ph, mk.img.width, mk.img.height); mk.shapes.forEach(sh => mkDrawShape(x, sh, pw, ph)); return new Promise(r => c.toBlob(r, 'image/png'));
 }
 const mkName = () => `wrapcheck-${car}-markup.png`;
 function mkStartDrag(act, e, x, y) {
