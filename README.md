@@ -23,8 +23,8 @@ Each car loads its own 20–40 MB pack from `godot/packs/` on first use and cach
 
 ## Annotating the car view
 
-Click **✎ Annotate** (bottom-left of the car view). The tools open upward from the button and the car **freezes**: auto-rotate stops, drags, scrolling and pinching no longer move it, and the angle buttons lock until you press **Done**.
-Draw arrows, boxes, freehand strokes and text notes in five colours (Undo and Clear included), then **Copy image** (paste it into an LLM chat), **Download**, or **Share…** (phones).
+Click **✎ Annotate** (bottom-left of the car view). The tools open upward as a column of icons and the car **freezes**: auto-rotate stops, drags, scrolling and pinching no longer move it, and the angle buttons lock until you press **Done**.
+Tools, top to bottom: **Pen** (selected by default), **Box**, **Circle**, **Arrow**, **Text**. Then the current colour (click it for the other four, which fan out to the right), Undo, Clear, **Copy image** (paste it into an LLM chat), **Download**, and **Share** (phones).
 Attach the picture with your wrap PNG so the LLM can see what to change. Everything is made in your browser; nothing is uploaded.
 
 ## URL options
