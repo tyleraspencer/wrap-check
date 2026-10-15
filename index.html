@@ -494,7 +494,7 @@ function mkFocus(clientX, clientY, u, v) {                    // keep the pictur
   const r = mkCanvas.getBoundingClientRect(), k = mkCanvas.width / (r.width || 1), t = mkRect();
   mk.cx = (mkCanvas.width / 2 - (clientX - r.left) * k) / t.w + u; mk.cy = (mkCanvas.height / 2 - (clientY - r.top) * k) / t.h + v;
 }
-const mkZoomTo = z => { mk.z = Math.max(1, Math.min(8, z)); mkRedraw(); };
+const MK_ZMIN = 0.3, mkZoomTo = z => { mk.z = Math.max(MK_ZMIN, Math.min(8, z)); mkRedraw(); };
 const mkRotPt = (cx, cy, x, y, a) => { const dx = x - cx, dy = y - cy, ca = Math.cos(a), sa = Math.sin(a); return [cx + dx * ca - dy * sa, cy + dx * sa + dy * ca]; };
 function mkBox(c, sh, W, H) {                                  // centre, size and rotation (in pixels) of a box, circle or text note
   if (sh.t === 'text') { const size = sh.size * W, lines = sh.s.split('\n'); c.save(); c.font = mkFontSpec(size); const w = Math.max(...lines.map(l => c.measureText(l).width)); c.restore(); const h = lines.length * size * 1.15; return { cx: sh.x * W + w / 2, cy: sh.y * H + h / 2, w, h, rot: sh.rot || 0 }; }
@@ -574,25 +574,46 @@ function mkPlaceText() {                                     // click to place, 
 function mkResumeSpin() {                                  // put Rotate back exactly as it was
   if (!resumeSpin) return; resumeSpin = false; spinning = true; currentView = 'rotate'; $('spin').classList.add('on'); send({ type: 'set_camera_auto_rotate', enabled: true });
 }
+function mkBackdrop() {                                       // paint the area around the picture in the picture's own background colour, so zooming out shows open space, not borders
+  try {
+    const c = document.createElement('canvas'), w = mk.img.naturalWidth, h = mk.img.naturalHeight; c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(mk.img, 0, 0);
+    const px = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]].map(q => x.getImageData(q[0], q[1], 1, 1).data), m = i => Math.round(px.reduce((t, d) => t + d[i], 0) / 4);
+    mkCanvas.style.background = `rgb(${m(0)},${m(1)},${m(2)})`;
+  } catch { mkCanvas.style.background = ''; }
+}
+async function mkGrabSharp() {                                // photograph the pinned engine; the picture is the same frame, just with more pixels
+  const u = await captureCar(); if (!u) return null; return loadImage(u);
+}
+function mkSharpen() {                                        // after the instant freeze: render the engine larger (same framing) and swap in a sharper picture
+  const t = ++mk.rt, cv = (() => { try { return frame.contentWindow.document.getElementById('canvas'); } catch { return null; } })(); if (!cv || !mk.fw) return;
+  const S = Math.min(3, 2800 / Math.max(cv.width, cv.height)); if (S < 1.25) return;
+  mk.S = S; frame.style.cssText = `inset:auto;left:0;top:0;width:${mk.fw * S}px;height:${mk.fh * S}px;transform:scale(${1 / S});transform-origin:0 0`; nudgeSoon();
+  const want = cv.width * S * 0.9, t0 = Date.now(), tick = async () => {
+    if (!mk.on || t !== mk.rt) return;
+    if (cv.width < want && Date.now() - t0 < 2500) return setTimeout(tick, 120);
+    setTimeout(async () => { if (!mk.on || t !== mk.rt) return; const img = await mkGrabSharp(); if (!img || !mk.on || t !== mk.rt) return;
+      if (Math.abs(img.naturalWidth / img.naturalHeight - mk.img.naturalWidth / mk.img.naturalHeight) > 0.01) return; mk.img = img; mkBackdrop(); mkRedraw(); }, 250);
+  }; tick();
+}
 function mkRefresh(delay = 700) {                           // the wrap (or car) changed while frozen: re-photograph the engine at the same camera, keep the marks
   if (!mk.on || !mk.ready) return; const t = ++mk.rt; mkSay('Updating…');
   setTimeout(async () => {
-    if (!mk.on || t !== mk.rt) return; const u = await captureCar(); if (!u || !mk.on || t !== mk.rt) return;
-    const img = await loadImage(u); if (!mk.on || t !== mk.rt) return; mk.img = img; mkRedraw(); mkSay('Wrap updated');
+    if (!mk.on || t !== mk.rt) return; const img = await mkGrabSharp(); if (!img || !mk.on || t !== mk.rt) return;
+    if (Math.abs(img.naturalWidth / img.naturalHeight - mk.img.naturalWidth / mk.img.naturalHeight) > 0.01) return; mk.img = img; mkBackdrop(); mkRedraw(); mkSay('Wrap updated');
   }, delay);
 }
 async function startMarkup() {                               // freeze instantly: grab the current frame and draw on that picture
   if (mk.on) return; mk.on = true; mk.ready = false; mk.shapes = []; mk.hist = []; mk.sel = null; mk.drag = null; mk.live = null; mk.z = 1; mk.cx = mk.cy = .5; mk.pts.clear(); mk.gest = mk.pan = null;
-  const fr = frame.getBoundingClientRect(); frame.style.cssText = `inset:auto;left:0;top:0;width:${fr.width}px;height:${fr.height}px`;      // the engine keeps this size while frozen, so a re-capture lines up with the marks
+  const fr = frame.getBoundingClientRect(); mk.fw = fr.width; mk.fh = fr.height; mk.S = 1; frame.style.cssText = `inset:auto;left:0;top:0;width:${fr.width}px;height:${fr.height}px`;      // the engine keeps this size while frozen, so a re-capture lines up with the marks
   resumeSpin = spinning; spinning = false; $('spin').classList.remove('on'); send({ type: 'set_camera_auto_rotate', enabled: false });
   const url = await captureCar(); if (!mk.on) return;
   if (!url) { mk.on = false; alert('Could not capture the 3D view in this browser.'); frame.style.cssText = ''; mkResumeSpin(); return; }
   mk.img = await loadImage(url); if (!mk.on) return;
   document.body.classList.add('marking'); $('mkPanel').hidden = false; setMarkBtn(true); $('mkChip').hidden = false; $('mkChip').textContent = 'View frozen · draw on the car';
-  mkSize(); mk.ready = true; mkCursor(-1, -1);
+  mkBackdrop(); mkSize(); mk.ready = true; mkCursor(-1, -1); mkSharpen();
   $('mkShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([], 'a.png', { type: 'image/png' })] }));
 }
-function stopMarkup() { const wasOn = mk.on; mkCloseFly(); mkCommitText(); mk.on = false; mk.ready = false; mk.live = null; mk.drag = null; mk.sel = null; mk.img = null; mk.gest = mk.pan = null; mk.pts.clear(); frame.style.cssText = ''; nudgeSoon(); document.body.classList.remove('marking'); $('mkPanel').hidden = true; setMarkBtn(false); $('mkChip').hidden = true; mkCtx.clearRect(0, 0, mkCanvas.width, mkCanvas.height); if (wasOn) mkResumeSpin(); }
+function stopMarkup() { const wasOn = mk.on; mkCloseFly(); mkCommitText(); mk.on = false; mk.ready = false; mk.live = null; mk.drag = null; mk.sel = null; mk.img = null; mk.rt++; mkCanvas.style.background = ''; mk.gest = mk.pan = null; mk.pts.clear(); frame.style.cssText = ''; nudgeSoon(); document.body.classList.remove('marking'); $('mkPanel').hidden = true; setMarkBtn(false); $('mkChip').hidden = true; mkCtx.clearRect(0, 0, mkCanvas.width, mkCanvas.height); if (wasOn) mkResumeSpin(); }
 $('markBtn').onclick = () => (mk.on ? stopMarkup() : startMarkup());
 async function mkRender() {                                  // full-size picture: the very frame you marked, plus the marks (no selection handles)
   mkCommitText(); if (!mk.img) { mkSay('Nothing to export yet.'); return null; }
@@ -652,7 +673,7 @@ function mkBeginGesture() {                                 // second finger dow
 }
 mkCanvas.addEventListener('pointermove', e => {
   if (mk.pts.has(e.pointerId)) mk.pts.set(e.pointerId, [e.clientX, e.clientY]);
-  if (mk.gest) { if (mk.pts.size < 2) return; const [a, b] = [...mk.pts.values()]; mk.z = Math.max(1, Math.min(8, mk.gest.z0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / mk.gest.d0)); mkFocus((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, mk.gest.u, mk.gest.v); mkRedraw(); return; }
+  if (mk.gest) { if (mk.pts.size < 2) return; const [a, b] = [...mk.pts.values()]; mk.z = Math.max(MK_ZMIN, Math.min(8, mk.gest.z0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / mk.gest.d0)); mkFocus((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, mk.gest.u, mk.gest.v); mkRedraw(); return; }
   if (mk.pan) { const r = mkCanvas.getBoundingClientRect(), k = mkCanvas.width / (r.width || 1), t = mkRect(); mk.cx = mk.pan.cx - (e.clientX - mk.pan.x) * k / t.w; mk.cy = mk.pan.cy - (e.clientY - mk.pan.y) * k / t.h; mkRedraw(); return; }
   const [x, y] = mkPos(e); if (mk.drag) { mkDragTo(x, y, e.shiftKey); return; }
   const l = mk.live; if (!l) { if (e.pointerType !== 'touch') mkCursor(x, y); return; }
@@ -673,7 +694,7 @@ const mkUp = e => {
   mkEnd();
 };
 mkCanvas.addEventListener('pointerup', mkUp); mkCanvas.addEventListener('pointercancel', mkUp);
-mkCanvas.addEventListener('wheel', e => { if (!mk.ready) return; e.preventDefault(); const [u, v] = mkPos(e); mk.z = Math.max(1, Math.min(8, mk.z * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)))); mkFocus(e.clientX, e.clientY, u, v); mkRedraw(); }, { passive: false });
+mkCanvas.addEventListener('wheel', e => { if (!mk.ready) return; e.preventDefault(); const [u, v] = mkPos(e); mk.z = Math.max(MK_ZMIN, Math.min(8, mk.z * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)))); mkFocus(e.clientX, e.clientY, u, v); mkRedraw(); }, { passive: false });
 $('mkZin').onclick = () => mkZoomTo(mk.z * 1.4); $('mkZout').onclick = () => mkZoomTo(mk.z / 1.4);
 document.querySelectorAll('#mkPanel .tool[data-t]').forEach(b => b.onclick = () => { mkCommitText(); mk.tool = b.dataset.t; document.querySelectorAll('#mkPanel .tool[data-t]').forEach(x => x.classList.toggle('on', x === b)); mkCursor(-1, -1); });
 const MK_COLORS = [['#ef4444', 'red'], ['#facc15', 'yellow'], ['#22c55e', 'green'], ['#3b82f6', 'blue'], ['#ffffff', 'white']];
