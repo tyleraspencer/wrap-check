@@ -480,6 +480,11 @@ const grabCopy = () => new Promise(res => frame.contentWindow.requestAnimationFr
     const t = document.createElement('canvas'); t.width = t.height = 32; const y = t.getContext('2d', { willReadFrequently: true }); y.drawImage(c, 0, 0, 32, 32); const d = y.getImageData(0, 0, 32, 32).data; let lit = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] && (d[i] || d[i + 1] || d[i + 2])) lit++; res(lit > 2 ? c : null);
   } catch { res(null); }
 }));
+async function captureSettled() {                          // photograph the engine once two consecutive frames agree (it has stopped turning)
+  let prev = null, last = null;
+  for (let i = 0; i < 14; i++) { const c = await grabCopy(); if (!c) continue; const g = mkSig(c); if (prev && mkSigDiff(prev, g) < 0.15) return c; prev = g; last = c; }
+  return last || captureCarCopy();
+}
 async function captureCarCopy() { for (let n = 0; n < 4; n++) { const c = await grabCopy(); if (c) return c; } return null; }
 async function captureCar() { for (let n = 0; n < 4; n++) { const u = await grabFrame(); if (u && !(await looksBlank(u))) return u; } return null; }
 
@@ -591,14 +596,6 @@ function mkBackdrop() {                                       // paint the area 
 const mkGrabSharp = () => captureCarCopy();                   // photograph the pinned engine; the picture is the same frame, just with more pixels
 const mkSig = c => { const t = document.createElement('canvas'); t.width = t.height = 48; const y = t.getContext('2d', { willReadFrequently: true }); y.drawImage(c, 0, 0, 48, 48); return y.getImageData(0, 0, 48, 48).data; };
 const mkSigDiff = (a, b) => { let d = 0; for (let i = 0; i < a.length; i += 4) d += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return d / (a.length / 4) / 3; };
-async function mkSettle() {                                   // the engine needs a few frames to actually stop turning; swap in its resting frame so the later sharp capture lines up
-  const t = mk.rt; let prev = null, sig = null;
-  for (let i = 0; i < 40 && mk.on && t === mk.rt; i++) {
-    const c = await grabCopy(); if (!c) continue; const g = mkSig(c);
-    if (prev && mkSigDiff(prev, g) < 0.15) { if (mk.on && t === mk.rt) { mk.img = c; mkRedraw(); } return true; } prev = g;
-  }
-  return mk.on && t === mk.rt;
-}
 function mkSharpen() {                                        // after the instant freeze: render the engine larger (same framing) and swap in a sharper picture
   const t = ++mk.rt, cv = (() => { try { return frame.contentWindow.document.getElementById('canvas'); } catch { return null; } })(); if (!cv || !mk.fw) return;
   const S = Math.min(3, 2800 / Math.max(cv.width, cv.height)); if (S < 1.25) return;
@@ -620,13 +617,13 @@ function mkRefresh(delay = 700) {                           // the wrap (or car)
 async function startMarkup() {                               // freeze instantly: grab the current frame and draw on that picture
   if (mk.on || mk.pending) return; if (mk.leaving) { mk.pending = true; mk.cancel = false; await mk.leaving; mk.pending = false; if (mk.cancel) { mk.cancel = false; return; } } if (mk.on) return; mk.on = true; mk.ready = false; mk.shapes = []; mk.hist = []; mk.sel = null; mk.drag = null; mk.live = null; mk.z = 1; mk.cx = mk.cy = .5; mk.pts.clear(); mk.gest = mk.pan = null;
   const fr = frame.getBoundingClientRect(); mk.fw = fr.width; mk.fh = fr.height; mk.S = 1; frame.style.cssText = `inset:auto;left:0;top:0;width:${fr.width}px;height:${fr.height}px`;      // the engine keeps this size while frozen, so a re-capture lines up with the marks
-  const shot = captureCarCopy();                                      // asked for first, so the picture is the frame on screen at the click
   resumeSpin = spinning; spinning = false; $('spin').classList.remove('on'); send({ type: 'set_camera_auto_rotate', enabled: false });
-  const img = await shot; if (!mk.on) return;
-  if (!img) { mk.on = false; alert('Could not capture the 3D view in this browser.'); frame.style.cssText = ''; mkResumeSpin(); return; }
+  setMarkBtn(true);
+  const img = await captureSettled(); if (!mk.on) return;       // the engine coasts for a few frames after the stop message; freeze on its resting frame, so nothing shifts afterwards
+  if (!img) { mk.on = false; alert('Could not capture the 3D view in this browser.'); frame.style.cssText = ''; setMarkBtn(false); mkResumeSpin(); return; }
   mk.img = img;
   document.body.classList.add('marking'); $('mkPanel').hidden = false; setMarkBtn(true); $('mkChip').hidden = false; $('mkChip').textContent = 'View frozen · draw on the car';
-  mkBackdrop(); mkSize(); mk.ready = true; mkCursor(-1, -1); mkSettle().then(ok => { if (ok && mk.on) mkSharpen(); });
+  mkBackdrop(); mkSize(); mk.ready = true; mkCursor(-1, -1); mkSharpen();
   $('mkShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([], 'a.png', { type: 'image/png' })] }));
 }
 function stopMarkup() {
