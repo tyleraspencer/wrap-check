@@ -52,8 +52,8 @@
     background: linear-gradient(transparent, rgba(0,0,0,.85)); text-align: center; }
   main { position: relative; min-width: 0; container-type: inline-size; container-name: viewer; }
   #car { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #1a1a1c; }
-  .bar { position: absolute; left: 16px; right: 16px; bottom: 16px; margin: 0 auto; width: max-content; max-width: calc(100% - 32px); box-sizing: border-box; align-items: center;
-    display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(2px, .4vw, 6px);
+  .bar { position: absolute; left: calc(var(--dock-left) + var(--card-w) + 8px); right: 16px; bottom: var(--bar-bottom); margin: 0 auto; width: max-content; max-width: calc(100% - var(--dock-left) - var(--card-w) - 24px); box-sizing: border-box; align-items: center;
+    display: flex; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: clamp(2px, .4vw, 6px);
     background: rgba(26,26,29,.88); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; padding: 6px; z-index: 2; }
   .bar button { display: inline-flex; align-items: center; justify-content: center; height: 36px; text-align: center; padding: 0 clamp(4px, .8vw, 11px); font-size: clamp(10px, .95vw, 14px); white-space: nowrap; }
   .bar button.on { border-color: var(--accent); background: #1c2740; }
@@ -65,25 +65,23 @@
   .hint { color: var(--dim); font-size: 12px; margin-top: 6px; }
   .embed .app { grid-template-columns: 1fr; } .embed aside, .embed .bar { display: none; }
   /* ---- annotate: dock (button + icon card), colour flyout ---- */
-  :root { --ctl-h: 50px; --btn: 40px; --card-w: calc(var(--btn) + 16px); }
-  .mk-dock { position: absolute; left: 12px; bottom: calc(16px + (var(--ctl-h) - var(--btn)) / 2); z-index: 6; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: calc(100% - 28px); }
-  .mark-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--btn); padding: 0 14px; box-sizing: border-box; background: rgba(26,26,29,.9); backdrop-filter: blur(8px); color: var(--text); border: 1px solid var(--line); border-radius: 10px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
-  .mark-btn:hover { border-color: #46464e; } .mark-btn svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .marking .mark-btn { width: var(--card-w); padding: 0; gap: 3px; font-size: 12px; background: var(--accent); border-color: var(--accent); color: #fff; } .marking .mark-btn svg { width: 12px; height: 12px; stroke-width: 2.5; }
+  :root { --ctl-h: 50px; --btn: 40px; --card-w: calc(var(--btn) + 16px); --dock-left: 12px; --bar-bottom: 16px; }
+  .bar::-webkit-scrollbar { display: none; }
+  .mk-dock { position: absolute; left: var(--dock-left); width: var(--card-w); bottom: calc(var(--bar-bottom) + (var(--ctl-h) - var(--btn)) / 2); z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 8px; max-height: calc(100% - 28px); }
+  .mark-btn { flex: none; display: grid; place-items: center; width: var(--btn); height: var(--btn); padding: 0; box-sizing: border-box; background: rgba(26,26,29,.9); backdrop-filter: blur(8px); color: var(--text); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  .mark-btn:hover { border-color: #46464e; } .mark-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .marking .mark-btn { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #mkTip { position: absolute; z-index: 20; background: rgba(8,8,10,.94); color: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; font-size: 12px; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.4); } #mkTip[hidden] { display: none; } .embed #mkTip { display: none; }
   .embed .mk-dock, .embed #mkCanvas, .embed #mkChip, .embed #mkFly { display: none; }
   .mk-panel { flex: 0 1 auto; min-height: 0; width: var(--card-w); box-sizing: border-box; background: rgba(26,26,29,.94); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 12px; padding: 8px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; align-items: center; gap: 6px; } .mk-panel::-webkit-scrollbar { display: none; } .mk-panel[hidden] { display: none; }
+  .mk-div { flex: none; align-self: stretch; height: 1px; margin: 2px 0; border: 0; background: #3b3b43; }
   .tool { flex: none; width: var(--btn); height: var(--btn); padding: 0; display: grid; place-items: center; background: #232327; color: var(--text); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
   .tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .tool.on { border-color: var(--accent); background: #1c2740; } .tool.primary { background: var(--accent); border-color: var(--accent); color: #fff; } .tool[hidden] { display: none; }
   .tool:focus-visible, .sw:focus-visible, .mark-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .sw { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; box-shadow: 0 0 0 1px var(--line); margin: 2px 0; } .sw.cur { border-color: #fff; }
   #mkFly { position: absolute; z-index: 8; display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: rgba(26,26,29,.96); border: 1px solid var(--line); border-radius: 999px; box-shadow: 0 6px 20px rgba(0,0,0,.35); } #mkFly[hidden] { display: none; } #mkFly .sw { margin: 0; }
-  /* Wide enough: the angle bar leaves room for the button on the left. Narrower: the button sits above the bar instead. */
-  @container viewer (min-width: 820px) { .bar { left: 136px; max-width: calc(100% - 152px); } }
-  @container viewer (max-width: 819px) {
-    .mk-dock { bottom: calc(16px + var(--ctl-h) + 8px); left: 8px; max-height: calc(100% - 16px - var(--ctl-h) - 24px); }
-    #mkChip { left: auto; right: 8px; transform: none; }          /* keep clear of the tool column */
-  }
+  @container viewer (max-width: 819px) { #mkChip { left: auto; right: 8px; transform: none; } }          /* narrow: keep the status chip clear of the tool column */
   #mkCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; touch-action: none; cursor: crosshair; display: none; } .marking #mkCanvas { display: block; }
   #mkChip { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; background: rgba(26,26,29,.9); color: var(--text); border: 1px solid var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 12px; pointer-events: none; white-space: nowrap; } #mkChip[hidden] { display: none; }
   .marking main { box-shadow: inset 0 0 0 2px var(--accent); } .marking .bar { opacity: .35; pointer-events: none; }
@@ -94,9 +92,8 @@
     .app { display: flex; flex-direction: column; height: auto; }
     main { order: -1; flex: none; position: sticky; top: 0; height: 52vh; height: 52dvh; z-index: 5; border-bottom: 1px solid var(--line); }
     aside { overflow: visible; border-left: 0; padding: 14px 14px calc(28px + env(safe-area-inset-bottom)); }
-    .bar { left: 8px; right: 8px; bottom: 8px; width: max-content; max-width: calc(100% - 16px); flex-wrap: nowrap; justify-content: flex-start;
-           overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 6px; padding: 5px; }
-    .bar::-webkit-scrollbar { display: none; }
+    :root { --dock-left: 8px; --bar-bottom: 8px; }
+    .bar { gap: 6px; padding: 5px; }
     .bar button { flex: none; padding: 0 13px; font-size: 14px; }
     #preview img { max-height: 190px; width: auto; max-width: 100%; margin: 0 auto; }
     .grid { grid-template-columns: repeat(4, 1fr); }
@@ -138,24 +135,29 @@
     <div id="status"><div id="statusText">Loading…</div><div class="track"><div id="fill"></div></div>
       <div class="hint" id="statusHint"></div></div>
     <canvas id="mkCanvas"></canvas>
-    <div id="mkChip" hidden>Freezing the view…</div>
+    <div id="mkChip" hidden>View frozen · draw on the car</div>
     <div class="mk-dock" id="mkDock">
       <div class="mk-panel" id="mkPanel" hidden>
-        <button class="tool on" data-t="pen" title="Pen" aria-label="Pen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
-        <button class="tool" data-t="box" title="Box" aria-label="Box"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></button>
-        <button class="tool" data-t="circle" title="Circle" aria-label="Circle"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg></button>
-        <button class="tool" data-t="arrow" title="Arrow" aria-label="Arrow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6"/><path d="M9 6h9v9"/></svg></button>
-        <button class="tool" data-t="text" title="Text" aria-label="Text"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg></button>
-        <button class="sw cur" id="mkCur" aria-haspopup="true" aria-expanded="false" title="Colour" aria-label="Colour: red. Click for other colours" style="background:#ef4444"></button>
-        <button class="tool" id="mkUndo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4v6h6"/><path d="M3.5 14a9 9 0 1 0 2.1-9.4L3 10"/></svg></button>
-        <button class="tool" id="mkClear" title="Clear all" aria-label="Clear all"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6M14 10v6"/></svg></button>
-        <button class="tool primary" id="mkCopy" title="Copy image" aria-label="Copy image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-        <button class="tool" id="mkSave" title="Download image" aria-label="Download image"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></button>
-        <button class="tool" id="mkShare" title="Share image" aria-label="Share image" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+        <button class="tool on" data-t="pen" data-tip="Pen" aria-label="Pen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+        <button class="tool" data-t="box" data-tip="Box" aria-label="Box"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></button>
+        <button class="tool" data-t="circle" data-tip="Circle" aria-label="Circle"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg></button>
+        <button class="tool" data-t="arrow" data-tip="Arrow" aria-label="Arrow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6"/><path d="M9 6h9v9"/></svg></button>
+        <button class="tool" data-t="text" data-tip="Text" aria-label="Text"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg></button>
+        <button class="tool" data-t="move" data-tip="Move &amp; rotate" aria-label="Move and rotate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3l7 17 2.5-7.5L21 10z"/><path d="M13 13l6 6"/></svg></button>
+        <hr class="mk-div">
+        <button class="sw cur" id="mkCur" aria-haspopup="true" aria-expanded="false" data-tip="Colour" aria-label="Colour: red. Click for other colours" style="background:#ef4444"></button>
+        <hr class="mk-div">
+        <button class="tool" id="mkUndo" data-tip="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4v6h6"/><path d="M3.5 14a9 9 0 1 0 2.1-9.4L3 10"/></svg></button>
+        <button class="tool" id="mkClear" data-tip="Clear all" aria-label="Clear all"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6M14 10v6"/></svg></button>
+        <hr class="mk-div">
+        <button class="tool primary" id="mkCopy" data-tip="Copy image" aria-label="Copy image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <button class="tool" id="mkSave" data-tip="Download image" aria-label="Download image"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></button>
+        <button class="tool" id="mkShare" data-tip="Share image" aria-label="Share image" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
       </div>
-      <button class="mark-btn" id="markBtn" title="Freeze the car and draw on it" aria-label="Annotate"></button>
+      <button class="mark-btn" id="markBtn" data-tip="Annotate" aria-label="Annotate"></button>
     </div>
     <div id="mkFly" hidden role="group" aria-label="Colours"></div>
+    <div id="mkTip" hidden role="tooltip"></div>
     <div class="bar" id="bar"></div>
   </main>
 </div>
@@ -473,11 +475,20 @@ async function captureCar() { for (let n = 0; n < 4; n++) { const u = await grab
 
 // Marks are stored in 0..1 coordinates, so they scale to the on-screen overlay and to the full-size export alike.
 const ICON = { pen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>', x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>' };
-const setMarkBtn = on => { $('markBtn').innerHTML = on ? ICON.x + 'Done' : ICON.pen + 'Annotate'; $('markBtn').setAttribute('aria-label', on ? 'Done annotating' : 'Annotate'); };
-const mk = { on: false, shapes: [], tool: 'pen', color: '#ef4444', live: null, input: null, textAt: null, ready: false };
+ICON.edit = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>';
+const setMarkBtn = on => { const b = $('markBtn'); b.innerHTML = on ? ICON.x : ICON.edit; const t = on ? 'Done' : 'Annotate'; b.setAttribute('aria-label', on ? 'Done annotating' : 'Annotate'); b.dataset.tip = t; };
+const mk = { on: false, shapes: [], hist: [], sel: null, drag: null, tool: 'pen', color: '#ef4444', live: null, input: null, textAt: null, ready: false, img: null };
 const mkCanvas = $('mkCanvas'), mkCtx = mkCanvas.getContext('2d');
+const mkFontSpec = size => `700 ${size}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+const mkU = () => mkCanvas.width / (mkCanvas.getBoundingClientRect().width || 1);     // canvas pixels per CSS pixel, so handles stay a constant on-screen size
+const mkRotPt = (cx, cy, x, y, a) => { const dx = x - cx, dy = y - cy, ca = Math.cos(a), sa = Math.sin(a); return [cx + dx * ca - dy * sa, cy + dx * sa + dy * ca]; };
+function mkBox(c, sh, W, H) {                                  // centre, size and rotation (in pixels) of a box, circle or text note
+  if (sh.t === 'text') { const size = sh.size * W, lines = sh.s.split('\n'); c.save(); c.font = mkFontSpec(size); const w = Math.max(...lines.map(l => c.measureText(l).width)); c.restore(); const h = lines.length * size * 1.15; return { cx: sh.x * W + w / 2, cy: sh.y * H + h / 2, w, h, rot: sh.rot || 0 }; }
+  return { cx: (sh.x + sh.w / 2) * W, cy: (sh.y + sh.h / 2) * H, w: sh.w * W, h: sh.h * H, rot: sh.rot || 0 };
+}
 function mkDrawShape(c, sh, W, H) {
   c.save(); c.strokeStyle = sh.c; c.fillStyle = sh.c; c.lineWidth = Math.max(3, W * 0.0045); c.lineCap = c.lineJoin = 'round';
+  if (sh.rot && (sh.t === 'box' || sh.t === 'ellipse' || sh.t === 'text')) { const b = mkBox(c, sh, W, H); c.translate(b.cx, b.cy); c.rotate(sh.rot); c.translate(-b.cx, -b.cy); }
   if (sh.t === 'pen') { c.beginPath(); sh.pts.forEach((p, i) => i ? c.lineTo(p[0] * W, p[1] * H) : c.moveTo(p[0] * W, p[1] * H)); c.stroke(); }
   else if (sh.t === 'box') { c.strokeRect(sh.x * W, sh.y * H, sh.w * W, sh.h * H); }
   else if (sh.t === 'ellipse') { c.beginPath(); c.ellipse((sh.x + sh.w / 2) * W, (sh.y + sh.h / 2) * H, Math.max(1, sh.w * W / 2), Math.max(1, sh.h * H / 2), 0, 0, Math.PI * 2); c.stroke(); }
@@ -486,18 +497,49 @@ function mkDrawShape(c, sh, W, H) {
     c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2 - Math.cos(a) * h * 0.6, y2 - Math.sin(a) * h * 0.6); c.stroke();
     c.beginPath(); c.moveTo(x2, y2); c.lineTo(x2 - h * Math.cos(a - 0.45), y2 - h * Math.sin(a - 0.45)); c.lineTo(x2 - h * Math.cos(a + 0.45), y2 - h * Math.sin(a + 0.45)); c.closePath(); c.fill();
   } else if (sh.t === 'text') {
-    const size = sh.size * W; c.font = `700 ${size}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`; c.textBaseline = 'top'; c.lineWidth = Math.max(3, size * 0.18); c.strokeStyle = 'rgba(0,0,0,.85)';
+    const size = sh.size * W; c.font = mkFontSpec(size); c.textBaseline = 'top'; c.lineWidth = Math.max(3, size * 0.18); c.strokeStyle = 'rgba(0,0,0,.85)';
     sh.s.split('\n').forEach((line, i) => { c.strokeText(line, sh.x * W, sh.y * H + i * size * 1.15); c.fillText(line, sh.x * W, sh.y * H + i * size * 1.15); });
   }
   c.restore();
 }
-function mkRedraw() { mkCtx.clearRect(0, 0, mkCanvas.width, mkCanvas.height); mk.shapes.forEach(s => mkDrawShape(mkCtx, s, mkCanvas.width, mkCanvas.height)); if (mk.live) mkDrawShape(mkCtx, mk.live, mkCanvas.width, mkCanvas.height); }
+// --- selecting, moving and rotating (every shape except freehand pen strokes) ---
+function mkHandles(sh) {                                       // handle positions for the selected shape, in canvas pixels
+  const W = mkCanvas.width, H = mkCanvas.height, off = 34 * mkU();
+  if (sh.t === 'arrow') { const x1 = sh.x1 * W, y1 = sh.y1 * H, x2 = sh.x2 * W, y2 = sh.y2 * H, cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, a = Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2; return { p1: [x1, y1], p2: [x2, y2], c: [cx, cy], rot: [cx + Math.cos(a) * off, cy + Math.sin(a) * off] }; }
+  const b = mkBox(mkCtx, sh, W, H); return { b, rot: mkRotPt(b.cx, b.cy, b.cx, b.cy - b.h / 2 - off, b.rot) };
+}
+function mkHit(sh, px, py, u) {
+  const W = mkCanvas.width, H = mkCanvas.height;
+  if (sh.t === 'arrow') { const x1 = sh.x1 * W, y1 = sh.y1 * H, x2 = sh.x2 * W, y2 = sh.y2 * H, dx = x2 - x1, dy = y2 - y1, t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy)) <= 14 * u; }
+  const b = mkBox(mkCtx, sh, W, H), [lx, ly] = mkRotPt(b.cx, b.cy, px, py, -b.rot), pad = 10 * u;
+  return Math.abs(lx - b.cx) <= b.w / 2 + pad && Math.abs(ly - b.cy) <= b.h / 2 + pad;
+}
+const mkPick = (px, py, u) => { for (let i = mk.shapes.length - 1; i >= 0; i--) { const s = mk.shapes[i]; if (s.t !== 'pen' && mkHit(s, px, py, u)) return s; } return null; };
+function mkGrab(sh, px, py, u) {                               // what is under the pointer on the selected shape: a handle or its body
+  const h = mkHandles(sh), near = p => Math.hypot(px - p[0], py - p[1]) <= 16 * u;
+  if (near(h.rot)) return { kind: 'rotate' };
+  if (sh.t === 'arrow') { if (near(h.p1)) return { kind: 'p1' }; if (near(h.p2)) return { kind: 'p2' }; }
+  return mkHit(sh, px, py, u) ? { kind: 'move' } : null;
+}
+function mkDrawSel(c) {
+  const sh = mk.sel; if (!sh) return; const u = mkU(), h = mkHandles(sh), dash = [6 * u, 4 * u];
+  c.save(); c.strokeStyle = '#3b82f6'; c.fillStyle = '#fff'; c.lineWidth = Math.max(1.5, 1.5 * u); c.setLineDash(dash);
+  const dot = p => { c.setLineDash([]); c.beginPath(); c.arc(p[0], p[1], 8 * u, 0, Math.PI * 2); c.fill(); c.stroke(); c.setLineDash(dash); };
+  if (sh.t === 'arrow') { c.beginPath(); c.moveTo(h.p1[0], h.p1[1]); c.lineTo(h.p2[0], h.p2[1]); c.stroke(); c.beginPath(); c.moveTo(h.c[0], h.c[1]); c.lineTo(h.rot[0], h.rot[1]); c.stroke(); dot(h.p1); dot(h.p2); dot(h.rot); }
+  else { const b = h.b, pad = 6 * u; c.save(); c.translate(b.cx, b.cy); c.rotate(b.rot); c.strokeRect(-b.w / 2 - pad, -b.h / 2 - pad, b.w + 2 * pad, b.h + 2 * pad); c.setLineDash([]); c.beginPath(); c.moveTo(0, -b.h / 2 - pad); c.lineTo(0, -b.h / 2 - 34 * u); c.stroke(); c.restore(); dot(h.rot); }
+  c.restore();
+}
+function mkRedraw() {
+  const W = mkCanvas.width, H = mkCanvas.height; mkCtx.clearRect(0, 0, W, H); if (mk.img) mkCtx.drawImage(mk.img, 0, 0, W, H);      // the frozen picture, then the marks
+  mk.shapes.forEach(s => mkDrawShape(mkCtx, s, W, H)); if (mk.live) mkDrawShape(mkCtx, mk.live, W, H); if (mk.on) mkDrawSel(mkCtx);
+}
 function mkSize() { const r = mkCanvas.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1); if (r.width) { mkCanvas.width = Math.round(r.width * dpr); mkCanvas.height = Math.round(r.height * dpr); mkRedraw(); } }
 const mkPos = e => { const r = mkCanvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
-const mkSay = t => { if (!t) return; const chip = $('mkChip'); chip.hidden = false; chip.textContent = t; clearTimeout(mk.chipT); mk.chipT = setTimeout(() => { if (mk.on && mk.ready) chip.textContent = 'View frozen · draw on the car'; }, 2600); };
+const mkSay = t => { if (!t) return; const chip = $('mkChip'); chip.hidden = false; chip.textContent = t; clearTimeout(mk.chipT); mk.chipT = setTimeout(() => { if (mk.on) chip.textContent = 'View frozen · draw on the car'; }, 2600); };
+const mkPushHist = () => { mk.hist.push(JSON.stringify(mk.shapes)); if (mk.hist.length > 100) mk.hist.shift(); };
 function mkCommitText() {
   const inp = mk.input; if (!inp) return; mk.input = null; const v = inp.value.trim();
-  if (v) mk.shapes.push({ t: 'text', x: inp._x, y: inp._y, s: v, c: inp._c, size: 0.034 }); inp.remove(); mkRedraw();
+  if (v) { mkPushHist(); const sh = { t: 'text', x: inp._x, y: inp._y, s: v, c: inp._c, size: 0.034 }; mk.shapes.push(sh); mk.sel = sh; } inp.remove(); mkRedraw();
 }
 function mkPlaceText() {                                     // click to place, type, Enter to finish
   const [x, y] = mk.textAt; mk.textAt = null; const cr = mkCanvas.getBoundingClientRect(), mr = $('mkCanvas').parentElement.getBoundingClientRect();
@@ -506,54 +548,111 @@ function mkPlaceText() {                                     // click to place, 
   mk.input = inp; $('mkCanvas').parentElement.appendChild(inp); inp.focus();
   inp.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); mkCommitText(); } else if (ev.key === 'Escape') { ev.stopPropagation(); mk.input = null; inp.remove(); } };
 }
-async function startMarkup() {
-  mk.on = true; mk.ready = false; mk.shapes = []; mk.live = null;
-  spinning = false; $('spin').classList.remove('on'); send({ type: 'set_camera_auto_rotate', enabled: false });        // freeze: stop any spin...
-  document.body.classList.add('marking'); $('mkPanel').hidden = false; setMarkBtn(true); $('mkChip').hidden = false; $('mkChip').textContent = 'Freezing the view…'; mkSay('');
-  mkSize();                                                  // ...the overlay swallows drags, wheel and pinch, and any momentum is given a moment to die out
-  await sleep(1100); if (!mk.on) return; mk.ready = true; $('mkChip').textContent = 'View frozen · draw on the car';
+async function startMarkup() {                               // freeze instantly: grab the current frame and draw on that picture
+  if (mk.on) return; mk.on = true; mk.ready = false; mk.shapes = []; mk.hist = []; mk.sel = null; mk.drag = null; mk.live = null;
+  spinning = false; $('spin').classList.remove('on'); send({ type: 'set_camera_auto_rotate', enabled: false });
+  const url = await captureCar(); if (!mk.on) return;
+  if (!url) { mk.on = false; alert('Could not capture the 3D view in this browser.'); return; }
+  mk.img = await loadImage(url); if (!mk.on) return;
+  document.body.classList.add('marking'); $('mkPanel').hidden = false; setMarkBtn(true); $('mkChip').hidden = false; $('mkChip').textContent = 'View frozen · draw on the car';
+  mkSize(); mk.ready = true; mkCursor(-1, -1);
   $('mkShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([], 'a.png', { type: 'image/png' })] }));
 }
-function stopMarkup() { mkCloseFly(); mkCommitText(); mk.on = false; mk.ready = false; mk.live = null; document.body.classList.remove('marking'); $('mkPanel').hidden = true; setMarkBtn(false); $('mkChip').hidden = true; mkCtx.clearRect(0, 0, mkCanvas.width, mkCanvas.height); }
+function stopMarkup() { mkCloseFly(); mkCommitText(); mk.on = false; mk.ready = false; mk.live = null; mk.drag = null; mk.sel = null; mk.img = null; document.body.classList.remove('marking'); $('mkPanel').hidden = true; setMarkBtn(false); $('mkChip').hidden = true; mkCtx.clearRect(0, 0, mkCanvas.width, mkCanvas.height); }
 $('markBtn').onclick = () => (mk.on ? stopMarkup() : startMarkup());
-async function mkRender() {                                  // full-size picture: the 3D view as the engine draws it, plus the marks
-  mkCommitText(); const url = await captureCar(); if (!url) { mkSay('Could not capture the 3D view.'); return null; }
-  const img = await loadImage(url), c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
-  const x = c.getContext('2d'); x.drawImage(img, 0, 0); mk.shapes.forEach(sh => mkDrawShape(x, sh, c.width, c.height)); return new Promise(r => c.toBlob(r, 'image/png'));
+async function mkRender() {                                  // full-size picture: the very frame you marked, plus the marks (no selection handles)
+  mkCommitText(); if (!mk.img) { mkSay('Nothing to export yet.'); return null; }
+  const c = document.createElement('canvas'); c.width = mk.img.naturalWidth; c.height = mk.img.naturalHeight;
+  const x = c.getContext('2d'); x.drawImage(mk.img, 0, 0); mk.shapes.forEach(sh => mkDrawShape(x, sh, c.width, c.height)); return new Promise(r => c.toBlob(r, 'image/png'));
 }
 const mkName = () => `wrapcheck-${car}-markup.png`;
+function mkStartDrag(act, e, x, y) {
+  mkCanvas.setPointerCapture(e.pointerId); const W = mkCanvas.width, H = mkCanvas.height, o = JSON.parse(JSON.stringify(mk.sel));
+  mk.drag = { kind: act.kind, x0: x, y0: y, orig: o, before: JSON.stringify(mk.shapes), moved: false };
+  if (act.kind === 'rotate' && o.t === 'arrow') mk.drag.a0 = Math.atan2(y * H - (o.y1 + o.y2) / 2 * H, x * W - (o.x1 + o.x2) / 2 * W);
+}
+function mkDragTo(x, y) {
+  const d = mk.drag, sh = mk.sel, o = d.orig, W = mkCanvas.width, H = mkCanvas.height, px = x * W, py = y * H;
+  if (!d.moved) { if (Math.hypot((x - d.x0) * W, (y - d.y0) * H) < 3 * mkU()) return; d.moved = true; mk.hist.push(d.before); if (mk.hist.length > 100) mk.hist.shift(); }
+  if (d.kind === 'move') { const dx = x - d.x0, dy = y - d.y0; if (sh.t === 'arrow') { sh.x1 = o.x1 + dx; sh.y1 = o.y1 + dy; sh.x2 = o.x2 + dx; sh.y2 = o.y2 + dy; } else { sh.x = o.x + dx; sh.y = o.y + dy; } }
+  else if (d.kind === 'p1') { sh.x1 = x; sh.y1 = y; } else if (d.kind === 'p2') { sh.x2 = x; sh.y2 = y; }
+  else if (d.kind === 'rotate') {
+    if (sh.t === 'arrow') { const cx = (o.x1 + o.x2) / 2 * W, cy = (o.y1 + o.y2) / 2 * H, da = Math.atan2(py - cy, px - cx) - d.a0, r1 = mkRotPt(cx, cy, o.x1 * W, o.y1 * H, da), r2 = mkRotPt(cx, cy, o.x2 * W, o.y2 * H, da); sh.x1 = r1[0] / W; sh.y1 = r1[1] / H; sh.x2 = r2[0] / W; sh.y2 = r2[1] / H; }
+    else { const b = mkBox(mkCtx, o, W, H); let a = Math.atan2(py - b.cy, px - b.cx) + Math.PI / 2; const step = Math.PI / 12, n = Math.round(a / step) * step; if (Math.abs(a - n) < 0.06) a = n; sh.rot = a; }   // snaps to 15 degrees
+  }
+  mkRedraw();
+}
+function mkCursor(x, y) {                                    // tell the user what a press would do
+  let cur = mk.tool === 'move' ? 'default' : 'crosshair';
+  if (x >= 0) { const W = mkCanvas.width, H = mkCanvas.height, px = x * W, py = y * H, u = mkU(), g = mk.sel && mkGrab(mk.sel, px, py, u); if (g) cur = g.kind === 'move' ? 'move' : 'grab'; else if (mk.tool === 'move' && mkPick(px, py, u)) cur = 'move'; }
+  mkCanvas.style.cursor = cur;
+}
 mkCanvas.addEventListener('pointerdown', e => {
-  if (!mk.ready || e.button > 0) return; mkCommitText(); const [x, y] = mkPos(e);
+  if (!mk.ready || e.button > 0) return; mkCommitText(); const [x, y] = mkPos(e), W = mkCanvas.width, H = mkCanvas.height, px = x * W, py = y * H, u = mkU();
+  if (mk.sel) { const act = mkGrab(mk.sel, px, py, u); if (act) { mkStartDrag(act, e, x, y); e.preventDefault(); return; } }      // handles and body of the selected shape work with any tool
+  if (mk.tool === 'move') { mk.sel = mkPick(px, py, u); mkRedraw(); if (mk.sel) { mkStartDrag({ kind: 'move' }, e, x, y); e.preventDefault(); } return; }
+  if (mk.sel) { mk.sel = null; mkRedraw(); }
   if (mk.tool === 'text') { mk.textAt = [x, y]; e.preventDefault(); return; }       // the note box is created on release so it keeps focus
   mkCanvas.setPointerCapture(e.pointerId);
   mk.live = mk.tool === 'pen' ? { t: 'pen', pts: [[x, y]], c: mk.color } : (mk.tool === 'box' || mk.tool === 'circle') ? { t: mk.tool === 'box' ? 'box' : 'ellipse', x, y, w: 0, h: 0, c: mk.color, x0: x, y0: y } : { t: 'arrow', x1: x, y1: y, x2: x, y2: y, c: mk.color };
 });
 mkCanvas.addEventListener('pointermove', e => {
-  const l = mk.live; if (!l) return; const [x, y] = mkPos(e);
+  const [x, y] = mkPos(e); if (mk.drag) { mkDragTo(x, y); return; }
+  const l = mk.live; if (!l) { if (e.pointerType !== 'touch') mkCursor(x, y); return; }
   if (l.t === 'pen') l.pts.push([x, y]); else if (l.t === 'box' || l.t === 'ellipse') { l.x = Math.min(l.x0, x); l.y = Math.min(l.y0, y); l.w = Math.abs(x - l.x0); l.h = Math.abs(y - l.y0); } else { l.x2 = x; l.y2 = y; }
   mkRedraw();
 });
-const mkEnd = () => { if (mk.textAt) { mkPlaceText(); return; } const l = mk.live; if (!l) return; mk.live = null;
+const mkEnd = () => {
+  if (mk.drag) { mk.drag = null; mkRedraw(); return; }
+  if (mk.textAt) { mkPlaceText(); return; } const l = mk.live; if (!l) return; mk.live = null;
   const big = l.t === 'pen' ? l.pts.length > 2 : (l.t === 'box' || l.t === 'ellipse') ? l.w > 0.01 && l.h > 0.01 : Math.hypot((l.x2 - l.x1) * mkCanvas.width, (l.y2 - l.y1) * mkCanvas.height) > 12;
-  if (big) mk.shapes.push(l); mkRedraw(); };
+  if (big) { mkPushHist(); mk.shapes.push(l); if (l.t !== 'pen') mk.sel = l; }       // a new shape is selected so you can adjust it straight away
+  mkRedraw();
+};
 mkCanvas.addEventListener('pointerup', mkEnd); mkCanvas.addEventListener('pointercancel', mkEnd);
-document.querySelectorAll('#mkPanel .tool[data-t]').forEach(b => b.onclick = () => { mkCommitText(); mk.tool = b.dataset.t; document.querySelectorAll('#mkPanel .tool[data-t]').forEach(x => x.classList.toggle('on', x === b)); });
+document.querySelectorAll('#mkPanel .tool[data-t]').forEach(b => b.onclick = () => { mkCommitText(); mk.tool = b.dataset.t; document.querySelectorAll('#mkPanel .tool[data-t]').forEach(x => x.classList.toggle('on', x === b)); mkCursor(-1, -1); });
 const MK_COLORS = [['#ef4444', 'red'], ['#facc15', 'yellow'], ['#22c55e', 'green'], ['#3b82f6', 'blue'], ['#ffffff', 'white']];
+const mkTip = $('mkTip'); let tipTimer = null, swallowClick = false, tipMute = null;       // swallowClick: a long-press that showed a tooltip must not also press the button
+function showTip(el, above) {
+  const t = el.dataset.tip; if (!t || document.body.classList.contains('embed')) return;
+  const host = $('mkCanvas').parentElement.getBoundingClientRect(), r = el.getBoundingClientRect();
+  mkTip.textContent = t; mkTip.hidden = false;
+  mkTip.style.left = (above ? r.left - host.left + r.width / 2 - mkTip.offsetWidth / 2 : r.right - host.left + 10) + 'px';
+  mkTip.style.top = (above ? r.top - host.top - mkTip.offsetHeight - 8 : r.top - host.top + r.height / 2 - mkTip.offsetHeight / 2) + 'px';
+}
+const hideTip = () => { mkTip.hidden = true; clearTimeout(tipTimer); };
+const tipTarget = e => e.target.closest && e.target.closest('[data-tip]');
+for (const root of [$('mkDock'), $('mkFly')]) {
+  root.addEventListener('mouseover', e => { const el = tipTarget(e); if (el && el !== tipMute) showTip(el, root.id === 'mkFly'); });
+  root.addEventListener('mouseout', e => { const el = tipTarget(e); if (el) { hideTip(); if (el === tipMute && !el.contains(e.relatedTarget)) tipMute = null; } });
+  root.addEventListener('focusin', e => { const el = tipTarget(e); if (el && el.matches(':focus-visible')) showTip(el, root.id === 'mkFly'); });
+  root.addEventListener('focusout', hideTip);
+  root.addEventListener('pointerdown', e => { swallowClick = false; if (e.pointerType === 'touch') { const el = tipTarget(e); if (el) tipTimer = setTimeout(() => { swallowClick = true; showTip(el, root.id === 'mkFly'); }, 450); } else { tipMute = tipTarget(e); hideTip(); } });     // long-press on touch screens; after a mouse press the tooltip stays away until the pointer leaves
+  root.addEventListener('click', e => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
+  ['pointerup', 'pointercancel', 'pointermove'].forEach(ev => root.addEventListener(ev, e => { if (e.pointerType === 'touch') { clearTimeout(tipTimer); if (ev !== 'pointermove') setTimeout(hideTip, 900); } }));
+  root.addEventListener('contextmenu', e => { if (tipTarget(e)) e.preventDefault(); });
+}
 const mkFly = $('mkFly');
-function mkCloseFly() { mkFly.hidden = true; $('mkCur').setAttribute('aria-expanded', 'false'); }
+function mkCloseFly() { hideTip(); mkFly.hidden = true; $('mkCur').setAttribute('aria-expanded', 'false'); }
 function mkOpenFly() {                                       // the other colours trail off to the right of the current one
   const cur = $('mkCur').getBoundingClientRect(), host = $('mkCanvas').parentElement.getBoundingClientRect();
-  mkFly.innerHTML = MK_COLORS.filter(c => c[0] !== mk.color).map(c => `<button class="sw" data-c="${c[0]}" style="background:${c[0]}" aria-label="${c[1]}"></button>`).join('');
+  mkFly.innerHTML = MK_COLORS.filter(c => c[0] !== mk.color).map(c => `<button class="sw" data-c="${c[0]}" data-tip="${c[1][0].toUpperCase() + c[1].slice(1)}" style="background:${c[0]}" aria-label="${c[1]}"></button>`).join('');
   mkFly.hidden = false; $('mkCur').setAttribute('aria-expanded', 'true');
   mkFly.style.left = (cur.right - host.left + 8) + 'px'; mkFly.style.top = (cur.top - host.top + cur.height / 2 - mkFly.offsetHeight / 2) + 'px';
-  mkFly.querySelectorAll('.sw').forEach(b => b.onclick = () => { mkCommitText(); mk.color = b.dataset.c; $('mkCur').style.background = mk.color; $('mkCur').setAttribute('aria-label', 'Colour: ' + b.getAttribute('aria-label') + '. Click for other colours'); mkCloseFly(); });
+  mkFly.querySelectorAll('.sw').forEach(b => b.onclick = () => { mkCommitText(); mk.color = b.dataset.c; $('mkCur').style.background = mk.color; $('mkCur').setAttribute('aria-label', 'Colour: ' + b.getAttribute('aria-label') + '. Click for other colours'); hideTip(); mkCloseFly(); });
 }
 $('mkCur').onclick = e => { e.stopPropagation(); mkFly.hidden ? mkOpenFly() : mkCloseFly(); };
 setMarkBtn(false);
 document.addEventListener('pointerdown', e => { if (!mkFly.hidden && !mkFly.contains(e.target) && e.target !== $('mkCur')) mkCloseFly(); }, true);
 $('mkPanel').addEventListener('scroll', mkCloseFly);
-$('mkUndo').onclick = () => { mkCommitText(); mk.shapes.pop(); mkRedraw(); }; $('mkClear').onclick = () => { mkCommitText(); mk.shapes = []; mkRedraw(); };
-addEventListener('keydown', e => { if (!mk.on) return; if (e.key === 'Escape') { if (!mkFly.hidden) mkCloseFly(); else stopMarkup(); } else if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); $('mkUndo').click(); } });
+$('mkUndo').onclick = () => { mkCommitText(); if (mk.hist.length) mk.shapes = JSON.parse(mk.hist.pop()); mk.sel = null; mkRedraw(); };
+$('mkClear').onclick = () => { mkCommitText(); if (mk.shapes.length) mkPushHist(); mk.shapes = []; mk.sel = null; mkRedraw(); };
+addEventListener('keydown', e => {
+  if (!mk.on) return; const typing = document.activeElement && document.activeElement.tagName === 'INPUT';
+  if (e.key === 'Escape') { if (!mkFly.hidden) mkCloseFly(); else if (mk.sel) { mk.sel = null; mkRedraw(); } else stopMarkup(); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && mk.sel && !typing) { e.preventDefault(); mkPushHist(); mk.shapes = mk.shapes.filter(s => s !== mk.sel); mk.sel = null; mkRedraw(); }
+  else if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !typing) { e.preventDefault(); $('mkUndo').click(); }
+});
 const syncCtl = () => { const h = Math.min(56, $('bar').offsetHeight); if (h) document.documentElement.style.setProperty('--ctl-h', h + 'px'); };      // matches the bar; capped when it wraps to two rows
 new ResizeObserver(syncCtl).observe($('bar')); syncCtl();
 new ResizeObserver(() => { if (mk.on) mkSize(); }).observe($('mkCanvas').parentElement);

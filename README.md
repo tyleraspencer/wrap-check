@@ -23,9 +23,9 @@ Each car loads its own 20–40 MB pack from `godot/packs/` on first use and cach
 
 ## Annotating the car view
 
-Click **✎ Annotate** (bottom-left of the car view). The tools open upward as a column of icons and the car **freezes**: auto-rotate stops, drags, scrolling and pinching no longer move it, and the angle buttons lock until you press **Done**.
-Tools, top to bottom: **Pen** (selected by default), **Box**, **Circle**, **Arrow**, **Text**. Then the current colour (click it for the other four, which fan out to the right), Undo, Clear, **Copy image** (paste it into an LLM chat), **Download**, and **Share** (phones).
-Attach the picture with your wrap PNG so the LLM can see what to change. Everything is made in your browser; nothing is uploaded.
+Click the **annotate** icon (bottom-left, level with the angle bar; the bar scrolls sideways on narrow screens). The car **freezes instantly**: the current frame is grabbed and you draw on that picture, so nothing can drift under your marks and the saved image is exactly the frame you marked.
+Tools, top to bottom: **Pen** (selected by default), **Box**, **Circle**, **Arrow**, **Text**, and **Move & rotate**. Then the current colour (click it for the other four, which fan out to the right), Undo, Clear, **Copy image** (paste it into an LLM chat), **Download**, and **Share** (phones). Hover (or long-press on a phone) for a tooltip.
+Every shape except pen strokes can be moved and rotated: a new shape is selected as soon as you draw it, so drag its body to move it and drag the round handle to rotate it (snaps to 15 degrees); arrows also have draggable ends. With the Move tool, click any shape to select it. **Delete** removes the selected shape, **Esc** deselects, and Undo reverses edits. Everything is made in your browser; nothing is uploaded.
 
 ## URL options
 
