@@ -24,7 +24,7 @@ Each car loads its own 20–40 MB pack from `godot/packs/` on first use and cach
 ## Annotating the car view
 
 Click the **annotate** icon (bottom-left, level with the angle bar; the bar scrolls sideways on narrow screens). The car **freezes instantly**: the current frame is grabbed and you draw on that picture, so nothing can drift under your marks and the saved image is exactly the frame you marked.
-Tools, top to bottom: **Pen** (selected by default), **Box**, **Circle**, **Arrow**, **Text**, **Move, rotate & resize**, and **Zoom in / out**. Then the current colour (click it for the other four, which fan out to the right), Undo, Clear, **Copy image** (paste it into an LLM chat), **Download**, and **Share** (phones). Hover (or long-press on a phone) for a tooltip.
+Tools, top to bottom: **Pen** (selected by default), **Box**, **Circle**, **Arrow**, **Text**, **Move, rotate & resize**, and **Zoom in / out**. Then the current color (click it for the other four, which fan out to the right), Undo, Clear, **Copy image** (paste it into an LLM chat), **Download**, and **Share** (phones). Hover (or long-press on a phone) for a tooltip.
 Every shape except pen strokes can be moved, rotated and resized: a new shape is selected as soon as you draw it, so drag its body to move it, the round handle to rotate it (snaps to 15 degrees), and the square handles to resize it (Shift on a corner keeps the proportions; text scales); arrows have draggable ends. The freeze is instant, then the picture quietly upgrades to a 2–3× sharper capture of the same frame, so zooming in stays crisp. Scroll or pinch to zoom the frozen picture (out to 30% as well as in) and drag it with the Move tool (or two fingers) to pan; `+`, `-` and `0` also work. The picture is never stretched, however you resize the window, and if you change the wrap while frozen it is re-photographed with the new wrap and your marks stay put. With the Move tool, click any shape to select it. **Delete** removes the selected shape, **Esc** deselects, and Undo reverses edits. Everything is made in your browser; nothing is uploaded.
 
 ## URL options
@@ -73,5 +73,5 @@ python3 tools/build_packs.py godot/index.pck godot/packs
 
 ## Known limits
 
-* The 3D engine renders a little darker and flatter than a real car; the page pre-compensates colour (toggle in the sidebar). Judge hue and placement, not brightness.
+* The 3D engine renders a little darker and flatter than a real car; the page pre-compensates color (toggle in the sidebar). Judge hue and placement, not brightness.
 * The engine, its car meshes and the pack come from the open-source Tesla Wrap Studio project's build of Tesla's visualizer; the wrap templates are Tesla's (`teslamotors/custom-wraps`).

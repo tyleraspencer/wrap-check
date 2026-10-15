@@ -64,7 +64,7 @@
   #fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .hint { color: var(--dim); font-size: 12px; margin-top: 6px; }
   .embed .app { grid-template-columns: 1fr; } .embed aside, .embed .bar { display: none; }
-  /* ---- annotate: dock (button + icon card), colour flyout ---- */
+  /* ---- annotate: dock (button + icon card), color flyout ---- */
   :root { --ctl-h: 50px; --btn: 40px; --card-w: calc(var(--btn) + 16px); --dock-left: 12px; --bar-bottom: 16px; }
   .bar::-webkit-scrollbar { display: none; }
   .mk-dock { position: absolute; left: var(--dock-left); width: var(--card-w); bottom: calc(var(--bar-bottom) + (var(--ctl-h) - var(--btn)) / 2); z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 8px; max-height: calc(100% - 28px); }
@@ -147,7 +147,7 @@
         <button class="tool" id="mkZin" data-tip="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg></button>
         <button class="tool" id="mkZout" data-tip="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></svg></button>
         <hr class="mk-div">
-        <button class="sw cur" id="mkCur" aria-haspopup="true" aria-expanded="false" data-tip="Colour" aria-label="Colour: red. Click for other colours" style="background:#ef4444"></button>
+        <button class="sw cur" id="mkCur" aria-haspopup="true" aria-expanded="false" data-tip="Color" aria-label="Color: red. Click for other colors" style="background:#ef4444"></button>
         <hr class="mk-div">
         <button class="tool" id="mkUndo" data-tip="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4v6h6"/><path d="M3.5 14a9 9 0 1 0 2.1-9.4L3 10"/></svg></button>
         <button class="tool" id="mkClear" data-tip="Clear all" aria-label="Clear all"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6M14 10v6"/></svg></button>
@@ -158,7 +158,7 @@
       </div>
       <button class="mark-btn" id="markBtn" data-tip="Annotate" aria-label="Annotate"></button>
     </div>
-    <div id="mkFly" hidden role="group" aria-label="Colours"></div>
+    <div id="mkFly" hidden role="group" aria-label="Colors"></div>
     <div id="mkTip" hidden role="tooltip"></div>
     <div class="bar" id="bar"></div>
   </main>
@@ -284,7 +284,7 @@ function pushTexture() {
   if (carLoaded && texture) send({ type: 'set_texture', texture });
 }
 
-// The engine renders each colour channel roughly as in^0.6 (measured), which turns
+// The engine renders each color channel roughly as in^0.6 (measured), which turns
 // burnt orange into amber. Pre-apply the inverse (^1/0.6) plus a small gain.
 const LUT = Array.from({ length: 256 }, (_, v) => Math.min(255, Math.round(255 * 1.3 * Math.pow(v / 255, 1 / 0.6))));
 
@@ -300,7 +300,7 @@ function setWrap(img) {
   }
   x.putImageData(im, 0, 0);
   fixedTex = c.toDataURL('image/png');
-  texture = fixedTex;                    // always colour-corrected for the engine
+  texture = fixedTex;                    // always color-corrected for the engine
   pushTexture(); mkRefresh();
 }
 function loadImage(src) {
@@ -586,7 +586,7 @@ function mkPlaceText() {                                     // click to place, 
 function mkResumeSpin(deferEngine) {                                  // put Rotate back exactly as it was
   if (!resumeSpin) return; resumeSpin = false; spinning = true; currentView = 'rotate'; $('spin').classList.add('on'); if (!deferEngine) send({ type: 'set_camera_auto_rotate', enabled: true });
 }
-function mkBackdrop() {                                       // paint the area around the picture in the picture's own background colour, so zooming out shows open space, not borders
+function mkBackdrop() {                                       // paint the area around the picture in the picture's own background color, so zooming out shows open space, not borders
   try {
     const c = document.createElement('canvas'), w = mk.img.width, h = mk.img.height; c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(mk.img, 0, 0);
     const px = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]].map(q => x.getImageData(q[0], q[1], 1, 1).data), m = i => Math.round(px.reduce((t, d) => t + d[i], 0) / 4);
@@ -752,12 +752,12 @@ for (const root of [$('mkDock'), $('mkFly')]) {
 }
 const mkFly = $('mkFly');
 function mkCloseFly() { hideTip(); mkFly.hidden = true; $('mkCur').setAttribute('aria-expanded', 'false'); }
-function mkOpenFly() {                                       // the other colours trail off to the right of the current one
+function mkOpenFly() {                                       // the other colors trail off to the right of the current one
   const cur = $('mkCur').getBoundingClientRect(), host = $('mkCanvas').parentElement.getBoundingClientRect();
   mkFly.innerHTML = MK_COLORS.filter(c => c[0] !== mk.color).map(c => `<button class="sw" data-c="${c[0]}" data-tip="${c[1][0].toUpperCase() + c[1].slice(1)}" style="background:${c[0]}" aria-label="${c[1]}"></button>`).join('');
   mkFly.hidden = false; $('mkCur').setAttribute('aria-expanded', 'true');
   mkFly.style.left = (cur.right - host.left + 8) + 'px'; mkFly.style.top = (cur.top - host.top + cur.height / 2 - mkFly.offsetHeight / 2) + 'px';
-  mkFly.querySelectorAll('.sw').forEach(b => b.onclick = () => { mkCommitText(); mk.color = b.dataset.c; $('mkCur').style.background = mk.color; $('mkCur').setAttribute('aria-label', 'Colour: ' + b.getAttribute('aria-label') + '. Click for other colours'); hideTip(); mkCloseFly(); });
+  mkFly.querySelectorAll('.sw').forEach(b => b.onclick = () => { mkCommitText(); mk.color = b.dataset.c; $('mkCur').style.background = mk.color; $('mkCur').setAttribute('aria-label', 'Color: ' + b.getAttribute('aria-label') + '. Click for other colors'); hideTip(); mkCloseFly(); });
 }
 $('mkCur').onclick = e => { e.stopPropagation(); mkFly.hidden ? mkOpenFly() : mkCloseFly(); };
 setMarkBtn(false);
