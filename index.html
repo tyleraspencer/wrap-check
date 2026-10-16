@@ -73,7 +73,7 @@
   .marking .mark-btn { background: var(--accent); border-color: var(--accent); color: #fff; }
   #mkTip { position: absolute; z-index: 20; background: rgba(8,8,10,.94); color: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; font-size: 12px; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.4); } #mkTip[hidden] { display: none; } .embed #mkTip { display: none; }
   .embed .mk-dock, .embed #mkCanvas, .embed #mkChip, .embed #mkFly { display: none; }
-  .mk-panel { flex: 0 1 auto; min-height: 0; width: var(--card-w); box-sizing: border-box; background: rgba(26,26,29,.94); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 12px; padding: 8px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; align-items: center; gap: 6px; } .mk-panel::-webkit-scrollbar { display: none; } .mk-panel[hidden] { display: none; }
+  .mk-panel { flex: 0 1 auto; min-height: 0; width: var(--card-w); box-sizing: border-box; background: rgba(26,26,29,.94); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 12px; padding: 8px 7px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none; display: flex; flex-direction: column; align-items: center; gap: 6px; } .mk-panel::-webkit-scrollbar { display: none; } .mk-panel[hidden] { display: none; }
   .mk-div { flex: none; align-self: stretch; height: 1px; margin: 2px 0; border: 0; background: #3b3b43; }
   .tool { flex: none; width: var(--btn); height: var(--btn); padding: 0; display: grid; place-items: center; background: #232327; color: var(--text); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
   .tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -810,7 +810,7 @@ function mkOpenFly() {                                       // the other colors
 $('mkCur').onclick = e => { e.stopPropagation(); mkFly.hidden ? mkOpenFly() : mkCloseFly(); };
 setMarkBtn(false);
 document.addEventListener('pointerdown', e => { if (!mkFly.hidden && !mkFly.contains(e.target) && e.target !== $('mkCur')) mkCloseFly(); }, true);
-$('mkPanel').addEventListener('scroll', mkCloseFly);
+$('mkPanel').addEventListener('scroll', () => { mkCloseFly(); if ($('mkPanel').scrollLeft) $('mkPanel').scrollLeft = 0; });      // up and down only
 $('mkUndo').onclick = () => { mkCommitText(); if (mk.hist.length) mk.shapes = JSON.parse(mk.hist.pop()); mk.sel = null; mkRedraw(); };
 $('mkClear').onclick = () => { mkCommitText(); if (mk.shapes.length) mkPushHist(); mk.shapes = []; mk.sel = null; mkRedraw(); };
 addEventListener('keydown', e => {
