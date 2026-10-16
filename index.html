@@ -74,6 +74,10 @@
   #mkTip { position: absolute; z-index: 20; background: rgba(8,8,10,.94); color: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; font-size: 12px; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.4); } #mkTip[hidden] { display: none; } .embed #mkTip { display: none; }
   .embed .mk-dock, .embed #mkCanvas, .embed #mkChip, .embed #mkFly { display: none; }
   .mk-panel { flex: 0 1 auto; min-height: 0; width: var(--card-w); box-sizing: border-box; background: rgba(26,26,29,.94); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 12px; padding: 8px 7px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none; display: flex; flex-direction: column; align-items: center; gap: 6px; } .mk-panel::-webkit-scrollbar { display: none; } .mk-panel[hidden] { display: none; }
+  .mk-fn { position: absolute; left: calc(var(--dock-left) + var(--card-w) + 8px); bottom: var(--bar-bottom); height: var(--ctl-h); max-width: calc(100% - var(--dock-left) - var(--card-w) - 24px); box-sizing: border-box; z-index: 6; display: flex; align-items: center; gap: 4px; padding: 0 5px; background: rgba(26,26,29,.94); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 12px; } .mk-fn[hidden] { display: none; }
+  .mk-fn .tool { flex: 0 1 auto; width: var(--btn); min-width: 30px; } .mk-vdiv { flex: none; width: 1px; height: 24px; background: #3b3b43; margin: 0 2px; }
+  .embed .mk-fn { display: none; }
+  @media (max-height: 700px) { .mk-panel { gap: 3px; padding: 6px 7px; } .mk-panel .tool { width: 34px; height: 34px; } .mk-panel .sw { width: 26px; height: 26px; margin: 1px 0; } .mk-panel .mk-div { margin: 1px 0; } }      /* short screens: tighter tools so the column rarely scrolls */
   .mk-div { flex: none; align-self: stretch; height: 1px; margin: 2px 0; border: 0; background: #3b3b43; }
   .tool { flex: none; width: var(--btn); height: var(--btn); padding: 0; display: grid; place-items: center; background: #232327; color: var(--text); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
   .tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -84,7 +88,7 @@
   #mkCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; touch-action: none; cursor: crosshair; display: none; background: #1a1a1c; } .marking #mkCanvas { display: block; } .marking main { overflow: hidden; } .leaving #mkCanvas { display: block; pointer-events: none; transition: opacity .15s ease; } .leaving main { overflow: hidden; }
   #mkChip { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; background: rgba(26,26,29,.9); color: var(--text); border: 1px solid var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 12px; pointer-events: none; white-space: nowrap; width: max-content; } #mkChip[hidden] { display: none; }
   @container viewer (max-width: 819px) { #mkChip { left: auto; right: 8px; transform: none; } }          /* narrow: keep the status chip clear of the tool column */
-  .marking main { box-shadow: inset 0 0 0 2px var(--accent); } .marking .bar { opacity: .35; pointer-events: none; }
+  .marking main { box-shadow: inset 0 0 0 2px var(--accent); } .marking .bar { visibility: hidden; }
   .mk-text { position: absolute; z-index: 7; background: rgba(0,0,0,.4); border: 1px dashed #fff; border-radius: 4px; font-weight: 700; padding: 0 4px; outline: none; min-width: 90px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   /* Wide enough: the angle bar leaves room for the button on the left. Narrower: the button sits above the bar instead. */
   @media (max-width: 760px) {
@@ -144,22 +148,24 @@
         <button class="tool" data-t="arrow" data-tip="Arrow" aria-label="Arrow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6"/><path d="M9 6h9v9"/></svg></button>
         <button class="tool" data-t="text" data-tip="Text" aria-label="Text"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg></button>
         <button class="tool" data-t="move" data-tip="Move, rotate &amp; resize" aria-label="Move, rotate and resize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3l7 17 2.5-7.5L21 10z"/><path d="M13 13l6 6"/></svg></button>
-        <button class="tool" id="mkZin" data-tip="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg></button>
-        <button class="tool" id="mkZout" data-tip="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></svg></button>
         <hr class="mk-div">
         <button class="sw cur" id="mkCur" aria-haspopup="true" aria-expanded="false" data-tip="Color" aria-label="Color: red. Click for other colors" style="background:#ef4444"></button>
-        <hr class="mk-div">
-        <button class="tool" id="mkUndo" data-tip="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4v6h6"/><path d="M3.5 14a9 9 0 1 0 2.1-9.4L3 10"/></svg></button>
-        <button class="tool" id="mkClear" data-tip="Clear all" aria-label="Clear all"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6M14 10v6"/></svg></button>
-        <hr class="mk-div">
-        <button class="tool primary" id="mkCopy" data-tip="Copy image" aria-label="Copy image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-        <button class="tool" id="mkSave" data-tip="Download image" aria-label="Download image"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></button>
-        <button class="tool" id="mkShare" data-tip="Share image" aria-label="Share image" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
       </div>
       <button class="mark-btn" id="markBtn" data-tip="Annotate" aria-label="Annotate"></button>
     </div>
     <div id="mkFly" hidden role="group" aria-label="Colors"></div>
     <div id="mkTip" hidden role="tooltip"></div>
+    <div class="mk-fn" id="mkFn" hidden>
+        <button class="tool" id="mkZin" data-tip="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg></button>
+        <button class="tool" id="mkZout" data-tip="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></svg></button>
+      <span class="mk-vdiv"></span>
+        <button class="tool" id="mkUndo" data-tip="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4v6h6"/><path d="M3.5 14a9 9 0 1 0 2.1-9.4L3 10"/></svg></button>
+        <button class="tool" id="mkClear" data-tip="Clear all" aria-label="Clear all"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6M14 10v6"/></svg></button>
+      <span class="mk-vdiv"></span>
+        <button class="tool primary" id="mkCopy" data-tip="Copy image" aria-label="Copy image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <button class="tool" id="mkSave" data-tip="Download image" aria-label="Download image"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></button>
+        <button class="tool" id="mkShare" data-tip="Share image" aria-label="Share image" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+    </div>
     <div class="bar" id="bar"></div>
   </main>
 </div>
@@ -661,13 +667,13 @@ async function startMarkup() {                               // freeze instantly
   const img = await captureSettled(); if (!mk.on) return;       // the engine coasts for a few frames after the stop message; freeze on its resting frame, so nothing shifts afterwards
   if (!img) { mk.on = false; alert('Could not capture the 3D view in this browser.'); frame.style.cssText = ''; setMarkBtn(false); mkResumeSpin(); return; }
   mk.img = img; mk.bw = img.width; mk.bh = img.height; mk.E = 1; mk.map = null;
-  document.body.classList.add('marking'); $('mkPanel').hidden = false; setMarkBtn(true); $('mkChip').hidden = false; $('mkChip').textContent = 'View frozen · draw on the car';
+  document.body.classList.add('marking'); $('mkPanel').hidden = false; $('mkFn').hidden = false; setMarkBtn(true); $('mkChip').hidden = false; $('mkChip').textContent = 'View frozen · draw on the car';
   mkBackdrop(); mkSize(); mk.ready = true; mkCursor(-1, -1); mkSharpen();
   $('mkShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([], 'a.png', { type: 'image/png' })] }));
 }
 function stopMarkup() {
   const wasOn = mk.on; mkCloseFly(); mkCommitText(); mk.on = false; mk.ready = false; mk.live = null; mk.drag = null; mk.sel = null; mk.rt++; mk.fade = null; mk.gest = mk.pan = null; mk.pts.clear();
-  document.body.classList.remove('marking'); $('mkPanel').hidden = true; setMarkBtn(false); $('mkChip').hidden = true;
+  document.body.classList.remove('marking'); $('mkPanel').hidden = true; $('mkFn').hidden = true; setMarkBtn(false); $('mkChip').hidden = true;
   if (!wasOn) return; mkResumeSpin(true);
   // The engine is still sized for the sharper capture. Keep the frozen picture up while it returns to normal and draws real frames, then fade it out.
   document.body.classList.add('leaving'); frame.style.cssText = ''; nudgeSoon(); const lv = ++mk.lv;
@@ -780,20 +786,21 @@ document.querySelectorAll('#mkPanel .tool[data-t]').forEach(b => b.onclick = () 
 const MK_COLORS = [['#ef4444', 'red'], ['#facc15', 'yellow'], ['#22c55e', 'green'], ['#3b82f6', 'blue'], ['#ffffff', 'white']];
 const mkTip = $('mkTip'); let tipTimer = null, swallowClick = false, tipMute = null;       // swallowClick: a long-press that showed a tooltip must not also press the button
 function showTip(el, above) {
-  const t = el.dataset.tip; if (!t || document.body.classList.contains('embed')) return;
+  above = above || el.id === 'markBtn'; const t = el.dataset.tip; if (!t || document.body.classList.contains('embed')) return;
   const host = $('mkCanvas').parentElement.getBoundingClientRect(), r = el.getBoundingClientRect();
   mkTip.textContent = t; mkTip.hidden = false;
-  mkTip.style.left = (above ? r.left - host.left + r.width / 2 - mkTip.offsetWidth / 2 : r.right - host.left + 10) + 'px';
+  mkTip.style.left = (above ? Math.max(4, Math.min(host.width - mkTip.offsetWidth - 4, r.left - host.left + r.width / 2 - mkTip.offsetWidth / 2)) : r.right - host.left + 10) + 'px';
   mkTip.style.top = (above ? r.top - host.top - mkTip.offsetHeight - 8 : r.top - host.top + r.height / 2 - mkTip.offsetHeight / 2) + 'px';
 }
 const hideTip = () => { mkTip.hidden = true; clearTimeout(tipTimer); };
 const tipTarget = e => e.target.closest && e.target.closest('[data-tip]');
-for (const root of [$('mkDock'), $('mkFly')]) {
-  root.addEventListener('mouseover', e => { const el = tipTarget(e); if (el && el !== tipMute) showTip(el, root.id === 'mkFly'); });
+let lastPT = 'mouse'; ['pointerdown', 'pointermove'].forEach(ev => document.addEventListener(ev, e => { lastPT = e.pointerType; }, true));      // a tap makes the browser fake a mouse hover; ignore that
+for (const root of [$('mkDock'), $('mkFly'), $('mkFn')]) {
+  root.addEventListener('mouseover', e => { const el = tipTarget(e); if (el && el !== tipMute && lastPT !== 'touch') showTip(el, root.id !== 'mkDock'); });
   root.addEventListener('mouseout', e => { const el = tipTarget(e); if (el) { hideTip(); if (el === tipMute && !el.contains(e.relatedTarget)) tipMute = null; } });
-  root.addEventListener('focusin', e => { const el = tipTarget(e); if (el && el.matches(':focus-visible')) showTip(el, root.id === 'mkFly'); });
+  root.addEventListener('focusin', e => { const el = tipTarget(e); if (el && el.matches(':focus-visible')) showTip(el, root.id !== 'mkDock'); });
   root.addEventListener('focusout', hideTip);
-  root.addEventListener('pointerdown', e => { swallowClick = false; if (e.pointerType === 'touch') { const el = tipTarget(e); if (el) tipTimer = setTimeout(() => { swallowClick = true; showTip(el, root.id === 'mkFly'); }, 450); } else { tipMute = tipTarget(e); hideTip(); } });     // long-press on touch screens; after a mouse press the tooltip stays away until the pointer leaves
+  root.addEventListener('pointerdown', e => { swallowClick = false; if (e.pointerType === 'touch') { const el = tipTarget(e); if (el) tipTimer = setTimeout(() => { swallowClick = true; showTip(el, root.id !== 'mkDock'); }, 450); } else { tipMute = tipTarget(e); hideTip(); } });     // long-press on touch screens; after a mouse press the tooltip stays away until the pointer leaves
   root.addEventListener('click', e => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
   ['pointerup', 'pointercancel', 'pointermove'].forEach(ev => root.addEventListener(ev, e => { if (e.pointerType === 'touch') { clearTimeout(tipTimer); if (ev !== 'pointermove') setTimeout(hideTip, 900); } }));
   root.addEventListener('contextmenu', e => { if (tipTarget(e)) e.preventDefault(); });

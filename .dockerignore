@@ -1,0 +1,6 @@
+**/node_modules
+godot/packs
+godot/index.pck*
+.git
+out
+share
