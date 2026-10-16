@@ -41,15 +41,14 @@ https://raw.githubusercontent.com/teslamotors/custom-wraps/master/<car id>/templ
 | `check_wrap.py` (size, dims, alpha, gaps, 20 panels) | Guaranteed by construction; `WrapCheck.validate` still runs on export as a belt-and-braces check. Not a model step. |
 | `fit_size.py` color ladder (lossless first, then 256 → 4 colors, keep the most frequent exact colors, no dither, alpha untouched) | Ported to JS and run automatically on export, with the cap raised from the skill's 700 KB to Tesla's 1 MB. Most designs will now pass losslessly. |
 | Filename rules (1–30 chars, letters/digits/space/_/-) | The model proposes a name; the app sanitizes it. |
-| Panel-by-panel orientation table (rotate 90° CW on canvas-left, CCW on canvas-right, hood and bumper 180°, trunk upright…) | Encoded as **surfaces** (below). The model draws upright in car terms; the app applies the transform. This is the biggest speed win: no orientation reasoning, no rotated-text bugs on the first try. |
-| Panel ID map (`modely-2025-premium-panel-ids.png`, `panel-map.json`) | Computed in the browser from the selected car's template (same 4-connected-cores + nearest-core fringe method), so it works for every car in the dropdown. Panel names come from the per-car surface table. |
+| Panel-by-panel orientation table (rotate 90° CW on canvas-left, CCW on canvas-right, hood and bumper 180°, trunk upright…) | Replaced by **car views** (below): the model draws on a picture of the car as a camera sees it, and the app warps that onto the template. There is no orientation to reason about, and no rotated-text bugs on the first try. |
+| Panel ID map (`modely-2025-premium-panel-ids.png`, `panel-map.json`) | Computed in the browser from the selected car's template (same 4-connected-cores + nearest-core fringe method), so it works for every car in the dropdown. |
 
 ### Stays as model knowledge (short system prompt)
 
 These are judgement, and the render does not replace them:
 
 - **Themed requests:** research first; take exact colors from the official guide; use official logo files as published, never redrawn or recolored; official typeface or the closest and say so. If assets can't be had, build from the official colors and say what was missing. (Trimmed from the skill almost word for word.)
-- **Composition facts that save iterations** (these are the Model Y Premium's, from `seam-adjacency.md`; the prompt only includes them when that car is selected, and other cars get theirs from calibration): the front and rear doors on each side are one surface with one baseline; the roof pillar strip 5 → 15 is one continuous stroke; the bumper is upside down relative to the hood; the rear quarters never touch the trunk face (18/19 sit between), so keep rear logos inside the trunk panel. Without them the model would spend a render round discovering each.
 - **Never mirror text or logos.**
 - **Edits preserve approved details.**
 
@@ -62,30 +61,32 @@ These are judgement, and the render does not replace them:
 - "Default to Model Y 2025 Premium, never ask" and the pinned Model Y template: the car is whatever the dropdown says, and its template comes live from Tesla's repo.
 - The 700 KB delivery cap: the app uses Tesla's 1 MB.
 - Hedged language about what a 2D mask can prove.
+- The Model Y seam facts (`seam-adjacency.md`: door pairs share a baseline, pillar 5 → 15 is one strip, the bumper is upside down relative to the hood, the rear quarters never touch the trunk face). A car view shows all of this directly: both doors are one picture, the bumper is drawn the way it faces, and the drawing guide shows where each panel ends.
 
-## The model's working surface
+## The model's working surface: car views
 
-The key design choice: **the model does not paint the raw template atlas.** That layout is sideways, split and upside down in places, which is where nearly all one-shot failures came from. Instead it writes a small design document in car terms, and the app compiles it into the atlas.
+The key design choice: **the model does not paint the raw template atlas.** That layout is sideways, split and upside down in places, which is where nearly all one-shot failures came from. Instead it draws on **pictures of the car** as five fixed cameras see it, and the app warps each drawing onto the template.
 
 ```json
 {
   "name": "Sunset_Stripe",
-  "base": { "svg": "<linearGradient …> or a solid fill, painted on every panel" },
+  "base":   { "color": "#0b2545" },
   "layers": [
-    { "surface": "left_side",  "svg": "<svg viewBox='0 0 1000 220'>…upright, front of car to the LEFT…</svg>" },
-    { "surface": "right_side", "svg": "…upright, front of car to the RIGHT…" },
-    { "surface": "hood",       "svg": "…upright as seen standing in front of the car…" },
-    { "surface": "trunk",      "svg": "…" },
-    { "surface": "roof_stripe","svg": "…" }
+    { "surface": "left",  "svg": "<svg viewBox='0 0 2208 557'>…the driver side as seen, front of the car to the LEFT…</svg>" },
+    { "surface": "right", "svg": "…the passenger side as seen, front to the RIGHT…" },
+    { "surface": "front", "svg": "…the nose, head on…" },
+    { "surface": "rear",  "svg": "…the back…" },
+    { "surface": "top",   "svg": "…from above: hood, roof rails, trunk lid…" },
+    { "surface": "canvas", "svg": "<svg viewBox='0 0 1024 1024'>…the template itself, for patterns…</svg>" }
   ]
 }
 ```
 
-- A **surface** is one or more panels that read as one area on the car, with its own upright coordinate box: `left_side` = 3 + 7 + 11 + 13 (fender, both doors, rear quarter), `right_side`, `hood`, `front_bumper`, `roof`, `pillars_left` (5 + 15), `pillars_right`, `spoiler`, `trunk` (20), `rear_corners`, `mirrors`.
-- Surface names are shared across cars where they make sense, but each car has its own set (the Cybertruck's template, for one, is laid out differently). `get_car()` reports exactly which surfaces the selected car has.
-- Each surface maps to the atlas with one affine transform per panel plus the panel's mask. The Model Y Premium transforms can be seeded from `panel-orientation.md` + `seam-adjacency.md` (user-verified) and checked against the calibration. Every car, including that one, gets them **automatically from the 3D engine**: render a position-coded wrap (the skill's calibration grid idea) from fixed cameras and read canvas x/y back from the clean screenshots. The skill tried this from photos of the in-car screen and glare broke it; the viewer's own render has no glare. One-off build step per car, results committed as JSON.
-- Escape hatch: a layer may target `"canvas"` with a raw SVG at the template's own size, for designs that really are atlas-shaped (a full-car camo, a pattern).
-- Raster art (photos, generated images, uploaded logos) enters as an `<image href="asset:ID">` inside a layer's SVG.
+- **Views:** `left`, `right`, `front`, `rear`, `top`. Each has a fixed size per car (the car cropped tight) and a **guide** image at that size: the car's outline, the areas this view paints in light grey with panel outlines, areas other views paint paler. The model draws in the guide's coordinates; what it draws upright reads upright on the car, across door gaps and around curves.
+- **Who paints what:** every small patch of every panel belongs to exactly one view, the one that sees it most face-on. So the doors belong to the side views, the hood to the top view, and a bumper's corners to the side views while its middle belongs to the front view. Ownership boundaries are smooth curves. Patches no camera sees (the underside, inside the wheel arches) only get the base.
+- **How it's built:** `tools/calibrate.mjs` renders Gray-code stripe textures through the viewer's own engine from each camera, stripes and their inverse, and reads back which template pixel every screen pixel shows; lighting and reflections cancel out. This is the skill's calibration-grid idea, which failed from photos of the in-car screen because of glare. Here it reads 99.5%+ of the car's pixels cleanly, down to single-pixel stripes. All five views use one camera distance, so a panel's apparent size is comparable between views. Results are stored per car as `calib/<car>.json` (a 4 × 4-pixel grid of screen positions per view plus ownership, about 200–250 KB), built once and committed. If Tesla changes a template, its fingerprint no longer matches and the car falls back to canvas layers until recalibrated.
+- `canvas` layers remain for designs that really are template-shaped (an all-over camo or pattern), and `base` fills every panel.
+- Raster art (photos, generated images, uploaded logos) goes in as `<image href="data:…">` inside a layer's SVG.
 
 **Why SVG:** both Claude and GPT write it fluently, it is tiny, it rasterizes crisply in the browser at any size, and **edits are cheap**: changing a color or moving text is a patch to one layer, not a redraw of the whole PNG.
 
@@ -93,7 +94,7 @@ The key design choice: **the model does not paint the raw template atlas.** That
 
 | Tool | Returns | Notes |
 |---|---|---|
-| `get_car()` | The dropdown's current car: id, name, template size, its surfaces with each box size and what "up" and "front" mean, one small template thumbnail | Called at the start and again whenever the user switches cars (the app injects a "car changed" note). |
+| `get_car()` | The dropdown's current car: id, name, template size, and its views, each with its size, a sentence on what it looks at and which way the front is, and its guide image | Called at the start and again whenever the user switches cars (the app injects a "car changed" note). |
 | `set_design(doc)` | Text only: compile errors, a cheap validation summary (coverage, any art clipped at a surface edge) | Full replace. |
 | `edit_design(ops)` | Same | JSON-patch on layers, so small fixes cost few tokens. |
 | `render(views, paint?)` | Screenshots | Default `three_quarter`, `rear_right`, `top`: together they show both sides, the hood, roof and trunk. Close-ups (`focus: "trunk"`, `"mirror_left"`…) for checking text and logos. Sent at about 1024 px wide JPEG to keep image tokens down. |
@@ -132,10 +133,18 @@ The existing **annotate** tool gets a **Send to chat** button: the user circles 
 - Validator: warns between 1,000,000 and 1,048,576 bytes; "artwork outside the panels" now means outside the template's alpha (it used to count art on the template's seam lines, which are on the car).
 - Raster art goes in as `<image href="data:…">` inside a layer (SVG drawn as an image can't load external URLs).
 
+**Step 2 done** (`tools/calibrate.mjs` + `tools/calibrate-page.js` → `calib/<car>.json`; car-view layers and `guide()` in `compose.js`; `WrapCheck.surfaces()` / `WrapCheck.guide(view)`):
+
+- All 9 cars calibrated, 60–100 s each, 126–228 KB per car. 98–100% of decoded screen pixels land on a real panel.
+- A test design with one word per view, rendered on every car: LEFT / RIGHT / FRONT / REAR read upright from their sides on all 9; side words span both doors; stripes follow the body; ownership boundaries between views are smooth.
+- Not covered by any of the five cameras: 8–26% of each car's template cells (undersides, wheel-arch liners, inner edges; the Cybertruck is highest at 26%, not yet inspected). Those only get the base. Two diagonal cameras would cover most of it if it turns out to matter.
+- Known artifact: thin slivers the front or rear camera barely sees can pick up that view's art at their edges (seen at the Model Y L tailgate).
+- Recalibrate with `node tools/calibrate.mjs [car ...]` when Tesla changes a template (the fingerprint check catches it) or a pack changes.
+
 ## Build order
 
 1. ~~Template loader for the dropdown car + export pipeline (JS port of `fit_size`, 1 MB) + canvas-only layers, working for every car, tested by hand with no model.~~ Done.
-2. Auto-calibration → surface tables for every car; surface compiler.
+2. ~~Auto-calibration → car views for every car; view compiler.~~ Done.
 3. Chat panel + Anthropic adapter + `get_car` / `set_design` / `edit_design` / `render` / `finish`.
 4. Annotate → Send to chat.
 5. Web search, logo attach.

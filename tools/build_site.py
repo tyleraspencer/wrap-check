@@ -41,6 +41,7 @@ for f in ('index.html', 'compose.js', 'icon.svg', 'icon-192.png', 'apple-touch-i
     shutil.copy(os.path.join(ROOT, f), out)
 for f in ('index.html', 'index.js', 'index.wasm', 'index.png'):
     shutil.copy(os.path.join(ROOT, 'godot', f), os.path.join(out, 'godot', f))
+shutil.copytree(os.path.join(ROOT, 'calib'), os.path.join(out, 'calib'))     # car-view calibration (tools/calibrate.mjs)
 open(os.path.join(out, '.nojekyll'), 'w').close()
 total = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(out) for f in fs)
 print(f'site ready in {out}: {total / 1e6:.0f} MB')

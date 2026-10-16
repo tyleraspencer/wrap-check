@@ -8,6 +8,7 @@ RUN cd mcp && npm ci --omit=dev && npx playwright-core install --with-deps chrom
 # The viewer (index.html, godot engine) is served from here; car packs are fetched from GitHub Pages on first use.
 COPY index.html compose.js server.js icon* apple-touch-icon.png ./
 COPY godot godot
+COPY calib calib
 COPY mcp/server.js mcp/server.js
 ENV PORT=8080
 EXPOSE 8080

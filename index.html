@@ -912,7 +912,10 @@ window.WrapCheck = {
     const r = await validate(b64ToFile(b64, name), car); if (!r.img) throw new Error('image could not be decoded');
     setWrap(r.img); await sleep(900); return { rows: r.rows, stats: r.stats };
   },
-  // Design documents (see compose.js). preview: put the design on the car; export: the final file, fitted under 1 MB.
+  // Design documents (see compose.js). surfaces: the car views this car can be drawn on; guide: a view's drawing aid (PNG, base64);
+  // preview: put the design on the car; export: the final file, fitted under 1 MB.
+  surfaces: () => WrapCompose.surfaces(car),
+  async guide(view) { const b = await WrapCompose.guide(car, view); return new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result.split(',')[1]); fr.readAsDataURL(b); }); },
   async preview(doc) {
     const { w, h, rgba } = await WrapCompose.compose(doc, car);
     const c = document.createElement('canvas'); c.width = w; c.height = h;

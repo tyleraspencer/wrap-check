@@ -4,10 +4,18 @@
 //   WrapCompose.compose(doc, carId)         design document -> RGBA at the template's size, cut to the template's panels
 //   WrapCompose.exportWrap(doc, carId)      compose + encode + fit under Tesla's 1 MB + a valid file name
 //
-// A design document (step 1 supports base + canvas layers; car-surface layers come with calibration):
+//   WrapCompose.surfaces(carId)             the car views a design can be drawn on (from calib/<car>.json), with their sizes
+//   WrapCompose.guide(carId, view)          a picture of which panels a view paints, at that view's size, to draw over
+//
+// A design document:
 //   { name: 'Sunset_Fade',
 //     base:   { color: '#0b2545' } | { svg: '<svg ...>' },              // optional; painted under every layer
-//     layers: [ { surface: 'canvas', svg: '<svg ...>' }, ... ] }       // drawn in order, in the template's own pixel space
+//     layers: [ { surface: 'left', svg: '<svg ...>' },                  // drawn on a view of the car: left, right, front, rear, top
+//               { surface: 'canvas', svg: '<svg ...>' }, ... ] }        // or in the template's own pixel space
+// A view layer is drawn as the car looks from that camera (upright, as seen); every template pixel that view owns is filled from
+// the drawing at the spot where that pixel appears on screen, so what is drawn upright reads upright on the car. Each small
+// patch of a panel belongs to exactly one view, the one that sees it most face-on, so a bumper's corners can belong to the
+// side views and its middle to the front view.
 // Anything a design leaves transparent shows the car's paint. Outside the template's panels nothing is ever drawn: the output's
 // alpha is the template's alpha (times the art's), so the file always matches the car's layout exactly.
 (() => {
@@ -38,6 +46,154 @@
     })().catch(e => { delete templates[carId]; throw e; });
   }
 
+  // ---------- panels (tesla-wrap-skill's mask method) ----------
+  // Cores are the 4-connected regions with alpha > 127; the faint anti-aliased fringe goes to the nearest core.
+  function panels(t) {
+    if (t.panels) return t.panels;
+    const { w, h, alpha } = t, n = w * h, labels = new Int32Array(n), q = new Int32Array(n), list = [];
+    const grow = (pn, p) => { const x = p % w, y = (p - x) / w; pn.pixels++; if (x < pn.bbox[0]) pn.bbox[0] = x; if (y < pn.bbox[1]) pn.bbox[1] = y; if (x >= pn.bbox[2]) pn.bbox[2] = x + 1; if (y >= pn.bbox[3]) pn.bbox[3] = y + 1; };
+    const near = (p, f) => { const x = p % w; if (x > 0) f(p - 1); if (x < w - 1) f(p + 1); if (p >= w) f(p - w); if (p < n - w) f(p + w); };
+    for (let s = 0; s < n; s++) {
+      if (alpha[s] <= 127 || labels[s]) continue;
+      const pn = { id: list.length + 1, pixels: 0, bbox: [w, h, 0, 0] }; list.push(pn);
+      let head = 0, tail = 0; q[tail++] = s; labels[s] = pn.id;
+      while (head < tail) { const p = q[head++]; grow(pn, p); near(p, o => { if (alpha[o] > 127 && !labels[o]) { labels[o] = pn.id; q[tail++] = o; } }); }
+    }
+    let head = 0, tail = 0;
+    for (let p = 0; p < n; p++) if (labels[p]) q[tail++] = p;
+    while (head < tail) { const p = q[head++]; near(p, o => { if (alpha[o] && !labels[o]) { labels[o] = labels[p]; grow(list[labels[p] - 1], o); q[tail++] = o; } }); }
+    return t.panels = { labels, list };
+  }
+
+  // Grid cells over the template, each belonging to one panel (the panel at its centre, else the commonest one in it).
+  function cellPanels(t, cell) {
+    const key = 'cells' + cell; if (t[key]) return t[key];
+    const P = panels(t), gw = Math.ceil(t.w / cell), gh = Math.ceil(t.h / cell), cells = new Int32Array(gw * gh);
+    for (let cy = 0; cy < gh; cy++) for (let cx = 0; cx < gw; cx++) {
+      const mx = Math.min(t.w - 1, cx * cell + (cell >> 1)), my = Math.min(t.h - 1, cy * cell + (cell >> 1));
+      let id = P.labels[my * t.w + mx];
+      if (!id) {
+        const count = new Map();
+        for (let y = cy * cell; y < Math.min(t.h, (cy + 1) * cell); y++) for (let x = cx * cell; x < Math.min(t.w, (cx + 1) * cell); x++) { const l = P.labels[y * t.w + x]; if (l) count.set(l, (count.get(l) || 0) + 1); }
+        let best = 0; for (const [l, n] of count) if (n > best) { best = n; id = l; }
+      }
+      cells[cy * gw + cx] = id;
+    }
+    return t[key] = { gw, gh, cells };
+  }
+
+  // ---------- calibration: where each template cell appears from each car view (built by tools/calibrate.mjs) ----------
+  const calibrations = {};
+  const inflate = async b64 => new Uint8Array(await new Response(new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer());
+  function loadCalibration(carId) {
+    return calibrations[carId] ??= (async () => {
+      const [t, r] = await Promise.all([loadTemplate(carId), fetch(`calib/${carId}.json`).catch(() => null)]);
+      if (!r || !r.ok) return { error: `No car-view calibration for ${carId} yet; use canvas layers.` };
+      const cal = await r.json();
+      if (cal.template.sha256 !== t.sha256) return { error: `Tesla has changed the ${carId} template since it was calibrated; use canvas layers until it is recalibrated.` };
+      cal.ownerOf = await inflate(cal.owner);                          // per cell: 1 + index into cal.order, 0 = no view
+      cal.weightOf = await inflate(cal.weights);                       // per cell, per view: softened ownership, 0..255
+      for (const v of Object.values(cal.views)) {                      // per cell: screen x, y (in quarter pixels), 0xffff = not visible
+        const q = new Uint16Array((await inflate(v.xy)).buffer), n = q.length / 2;
+        v.X = new Float32Array(n); v.Y = new Float32Array(n);
+        for (let c = 0; c < n; c++) { v.X[c] = q[2 * c] === 0xffff ? -1 : q[2 * c] / 4; v.Y[c] = q[2 * c + 1] === 0xffff ? -1 : q[2 * c + 1] / 4; }
+      }
+      cal.grid = cellPanels(t, cal.cell);
+      return cal;
+    })();
+  }
+  async function surfaces(carId) {
+    const cal = await loadCalibration(carId);
+    if (cal.error) return { car: carId, views: {}, note: cal.error };
+    const views = {};
+    for (const [name, v] of Object.entries(cal.views)) views[name] = { width: v.crop[2] - v.crop[0], height: v.crop[3] - v.crop[1], looking: v.looking };
+    return { car: carId, views };
+  }
+
+  // Where template pixel (x, y) of panel `id` appears on a view's screen: bilinear between the centres of the neighbouring cells
+  // of the same panel that the view can see. Null if none can.
+  function locate(cal, v, id, x, y) {
+    const { gw, gh, cells } = cal.grid, C = cal.cell, gx = (x + 0.5) / C - 0.5, gy = (y + 0.5) / C - 0.5, x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
+    let sx = 0, sy = 0, sw = 0;
+    for (const [ox, oy, w] of [[0, 0, (1 - fx) * (1 - fy)], [1, 0, fx * (1 - fy)], [0, 1, (1 - fx) * fy], [1, 1, fx * fy]]) {
+      const cx = x0 + ox, cy = y0 + oy; if (cx < 0 || cy < 0 || cx >= gw || cy >= gh || w <= 0) continue;
+      const c = cy * gw + cx; if (cells[c] !== id || v.X[c] < 0) continue;
+      sx += v.X[c] * w; sy += v.Y[c] * w; sw += w;
+    }
+    if (sw > 1e-6) return [sx / sw, sy / sw];
+    const c = Math.min(gh - 1, (y / C) | 0) * gw + Math.min(gw - 1, (x / C) | 0);
+    return cells[c] === id && v.X[c] >= 0 ? [v.X[c], v.Y[c]] : null;
+  }
+
+  // Which view paints template pixel (x, y) of panel `id`: the one with the highest ownership weight, interpolated between the
+  // neighbouring cells of the same panel, so the boundary between two views is a smooth curve. 1-based index into cal.order.
+  function ownerAt(cal, id, x, y) {
+    const { gw, gh, cells } = cal.grid, C = cal.cell, K = cal.order.length, gx = (x + 0.5) / C - 0.5, gy = (y + 0.5) / C - 0.5, x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
+    const acc = new Float32Array(K); let sw = 0;
+    for (const [ox, oy, w] of [[0, 0, (1 - fx) * (1 - fy)], [1, 0, fx * (1 - fy)], [0, 1, (1 - fx) * fy], [1, 1, fx * fy]]) {
+      const cx = x0 + ox, cy = y0 + oy; if (cx < 0 || cy < 0 || cx >= gw || cy >= gh || w <= 0) continue;
+      const c = cy * gw + cx; if (cells[c] !== id) continue;
+      for (let k = 0; k < K; k++) acc[k] += w * cal.weightOf[c * K + k]; sw += w;
+    }
+    if (!sw) return cal.ownerOf[Math.min(gh - 1, (y / C) | 0) * gw + Math.min(gw - 1, (x / C) | 0)];
+    let best = 0, bv = 0; for (let k = 0; k < K; k++) if (acc[k] > bv) { bv = acc[k]; best = k + 1; }
+    return best;
+  }
+
+  // Warp a drawing made on a car view onto the template: every template pixel that view owns takes the drawing's color at the
+  // place it appears on screen (bilinear, alpha-weighted).
+  function warpView(cal, t, name, img) {
+    const v = cal.views[name], vi = cal.order.indexOf(name) + 1, cw = v.crop[2] - v.crop[0], ch = v.crop[3] - v.crop[1];
+    const c = new OffscreenCanvas(cw, ch), x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0, cw, ch);
+    const src = x.getImageData(0, 0, cw, ch).data, out = new ImageData(t.w, t.h), d = out.data, P = panels(t);
+    for (let y = 0; y < t.h; y++) for (let X = 0; X < t.w; X++) {
+      const a = y * t.w + X, id = P.labels[a]; if (!id) continue;
+      if (ownerAt(cal, id, X, y) !== vi) continue;
+      const at = locate(cal, v, id, X, y); if (!at) continue;
+      const px = at[0] - v.crop[0] - 0.5, py = at[1] - v.crop[1] - 0.5, x0 = Math.floor(px), y0 = Math.floor(py), fx = px - x0, fy = py - y0;
+      let r = 0, g = 0, b = 0, al = 0;
+      for (const [ox, oy, wt] of [[0, 0, (1 - fx) * (1 - fy)], [1, 0, fx * (1 - fy)], [0, 1, (1 - fx) * fy], [1, 1, fx * fy]]) {
+        const qx = x0 + ox, qy = y0 + oy; if (qx < 0 || qy < 0 || qx >= cw || qy >= ch || !wt) continue;
+        const k = (qy * cw + qx) * 4, w2 = wt * src[k + 3];
+        r += src[k] * w2; g += src[k + 1] * w2; b += src[k + 2] * w2; al += w2;
+      }
+      if (al <= 0) continue;
+      const j = a * 4; d[j] = r / al; d[j + 1] = g / al; d[j + 2] = b / al; d[j + 3] = al;
+    }
+    return out;
+  }
+
+  // A drawing aid for one view, at that view's size: the car as that camera sees it. Areas this view paints are light grey with
+  // dark panel outlines; areas another view paints are paler with grey outlines; white is not on the car. Anything drawn outside
+  // the light grey areas is ignored.
+  async function guide(carId, name) {
+    const cal = await loadCalibration(carId);
+    if (cal.error) throw new Error(cal.error);
+    const v = cal.views[name]; if (!v) throw new Error(`No "${name}" view; views: ${Object.keys(cal.views).join(', ')}`);
+    const vi = cal.order.indexOf(name) + 1, cw = v.crop[2] - v.crop[0], ch = v.crop[3] - v.crop[1], { gw, gh, cells } = cal.grid;
+    const id = new Int32Array(cw * ch), own = new Uint8Array(cw * ch);
+    const inTri = (px, py, a, b, c) => { const d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]); if (!d) return false; const l1 = ((b[1] - c[1]) * (px - c[0]) + (c[0] - b[0]) * (py - c[1])) / d, l2 = ((c[1] - a[1]) * (px - c[0]) + (a[0] - c[0]) * (py - c[1])) / d; return l1 >= 0 && l2 >= 0 && l1 + l2 <= 1; };
+    for (const pass of [0, 1]) for (let cy = 0; cy < gh - 1; cy++) for (let cx = 0; cx < gw - 1; cx++) {
+      const q = [cy * gw + cx, cy * gw + cx + 1, (cy + 1) * gw + cx + 1, (cy + 1) * gw + cx], pid = cells[q[0]];
+      if (!pid || q.some(c => cells[c] !== pid || v.X[c] < 0)) continue;
+      if ((cal.ownerOf[q[0]] === vi ? 1 : 0) !== pass) continue;
+      const pts = q.map(c => [v.X[c] - v.crop[0], v.Y[c] - v.crop[1]]);
+      const x0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[0])))), x1 = Math.min(cw - 1, Math.ceil(Math.max(...pts.map(p => p[0]))));
+      const y0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[1])))), y1 = Math.min(ch - 1, Math.ceil(Math.max(...pts.map(p => p[1]))));
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
+        if (inTri(x + 0.5, y + 0.5, pts[0], pts[1], pts[2]) || inTri(x + 0.5, y + 0.5, pts[0], pts[2], pts[3])) { id[y * cw + x] = pid * 2 + pass; own[y * cw + x] = pass; }
+    }
+    const img = new ImageData(cw, ch), d = img.data;
+    for (let p = 0; p < id.length; p++) {
+      const k = p * 4, x = p % cw, edge = id[p] && ((x > 0 && id[p - 1] !== id[p]) || (x < cw - 1 && id[p + 1] !== id[p]) || (p >= cw && id[p - cw] !== id[p]) || (p < id.length - cw && id[p + cw] !== id[p]));
+      const [r, g, b] = !id[p] ? [255, 255, 255] : edge ? (own[p] ? [40, 40, 40] : [170, 170, 170]) : own[p] ? [214, 220, 228] : [242, 242, 242];
+      d[k] = r; d[k + 1] = g; d[k + 2] = b; d[k + 3] = 255;
+    }
+    const c = new OffscreenCanvas(cw, ch); c.getContext('2d').putImageData(img, 0, 0);
+    return c.convertToBlob({ type: 'image/png' });
+  }
+
   // ---------- design document -> RGBA ----------
   async function rasterSvg(svg, w, h) {
     let s = String(svg).trim();
@@ -62,9 +218,15 @@
       else throw new Error('base needs color or svg');
     }
     for (const [i, l] of (doc.layers || []).entries()) {
-      if ((l.surface || 'canvas') !== 'canvas') throw new Error(`layer ${i}: surface "${l.surface}" is not available yet; use "canvas"`);
       if (!l.svg) throw new Error(`layer ${i}: missing svg`);
-      await draw(l.svg);
+      const surface = l.surface || 'canvas';
+      if (surface === 'canvas') { await draw(l.svg); continue; }
+      const cal = await loadCalibration(carId);
+      if (cal.error) throw new Error(`layer ${i}: ${cal.error}`);
+      if (!cal.views[surface]) throw new Error(`layer ${i}: no "${surface}" view for this car; use one of ${Object.keys(cal.views).join(', ')} or canvas`);
+      const v = cal.views[surface], warped = warpView(cal, t, surface, await rasterSvg(l.svg));
+      const tmp = new OffscreenCanvas(w, h); tmp.getContext('2d').putImageData(warped, 0, 0);
+      x.drawImage(tmp, 0, 0);
     }
     const art = x.getImageData(0, 0, w, h).data;
     // Cut to the template. Alpha = template alpha × art alpha, so a fully painted panel keeps the template's alpha byte for byte
@@ -204,5 +366,5 @@
     return { blob, name: fileName(doc.name), w, h, ...info, template: { url: template.url, sha256: template.sha256 } };
   }
 
-  window.WrapCompose = { CAP, loadTemplate, compose, encodePng, fitToCap, fileName, exportWrap };
+  window.WrapCompose = { CAP, loadTemplate, panels, cellPanels, loadCalibration, surfaces, guide, compose, encodePng, fitToCap, fileName, exportWrap };
 })();
