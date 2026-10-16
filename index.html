@@ -170,6 +170,7 @@
   </main>
 </div>
 
+<script src="compose.js"></script>
 <script>
 const RAW = 'https://raw.githubusercontent.com/teslamotors/custom-wraps/master';
 // Address of the Wrap Check share service (share/worker.js on Cloudflare). Empty = sharing falls back to links that carry the image.
@@ -315,16 +316,8 @@ function loadImage(src) {
 
 // ---- validation against Tesla's published rules ----
 const templateCache = {};
-async function printableMask(carId) {                      // Tesla's template: opaque white = printable panel
-  if (!templateCache[carId]) templateCache[carId] = (async () => {
-    const r = await fetch(`${RAW}/${carId}/template.png`); if (!r.ok) throw new Error('template ' + r.status);
-    const img = await loadImage(URL.createObjectURL(await r.blob()));
-    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
-    const x = c.getContext('2d'); x.drawImage(img, 0, 0);
-    const p = x.getImageData(0, 0, c.width, c.height).data, m = new Uint8Array(c.width * c.height);
-    for (let i = 0; i < m.length; i++) m[i] = p[i * 4 + 3] > 200 && p[i * 4] > 200 ? 1 : 0;
-    return { w: c.width, h: c.height, m };
-  })();
+async function printableMask(carId) {                      // Tesla's template: opaque white = printable panel (m); any alpha = on the car (a)
+  if (!templateCache[carId]) templateCache[carId] = WrapCompose.loadTemplate(carId).then(t => ({ w: t.w, h: t.h, m: t.white, a: t.alpha })).catch(e => { delete templateCache[carId]; throw e; });
   return templateCache[carId];
 }
 async function validate(file, carId = car) {
@@ -336,8 +329,10 @@ async function validate(file, carId = car) {
   if (!/^[A-Za-z0-9_\- ]+$/.test(base) || base.length > 30)
     add('warn', 'File name should be letters, numbers, spaces, _ or - only, 30 characters max (Tesla\'s rule)');
   const kb = file.size / 1024;
-  add(file.size <= 1048576 ? 'ok' : 'bad',
-      `File size ${kb >= 1024 ? (kb / 1024).toFixed(2) + ' MB' : Math.round(kb) + ' KB'} (max 1 MB)`);
+  const sizeText = `File size ${kb >= 1024 ? (kb / 1024).toFixed(2) + ' MB' : Math.round(kb) + ' KB'}`;
+  if (file.size < 1e6) add('ok', `${sizeText} (max 1 MB)`);                      // Tesla says "1 MB" without saying which one:
+  else if (file.size <= 1048576) add('warn', `${sizeText}: over 1,000,000 bytes, so it may be over Tesla's 1 MB limit`);   // under both = safe
+  else add('bad', `${sizeText} (max 1 MB)`);
   const url = URL.createObjectURL(file);
   let img = null;
   try { img = await loadImage(url); } catch { add('bad', 'Could not read image'); }
@@ -355,7 +350,7 @@ async function validate(file, carId = car) {
       let art = 0, outside = 0, covered = 0, printable = 0;
       for (let i = 0; i < t.m.length; i++) {
         const on = p[i * 4 + 3] > 40;
-        if (t.m[i]) { printable++; if (on) covered++; } if (on) { art++; if (!t.m[i]) outside++; }
+        if (t.m[i]) { printable++; if (on) covered++; } if (on) { art++; if (!t.a[i]) outside++; }    // seam lines are on the car too
       }
       stats.coveragePct = +(100 * covered / printable).toFixed(1);
       stats.outsidePct = art ? +(100 * outside / art).toFixed(1) : 0;
@@ -916,6 +911,19 @@ window.WrapCheck = {
   async setWrap(b64, name = 'wrap.png') {
     const r = await validate(b64ToFile(b64, name), car); if (!r.img) throw new Error('image could not be decoded');
     setWrap(r.img); await sleep(900); return { rows: r.rows, stats: r.stats };
+  },
+  // Design documents (see compose.js). preview: put the design on the car; export: the final file, fitted under 1 MB.
+  async preview(doc) {
+    const { w, h, rgba } = await WrapCompose.compose(doc, car);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').putImageData(new ImageData(rgba, w, h), 0, 0);       // only for the 3D view, so canvas rounding is fine here
+    setWrap(c); await sleep(900);
+  },
+  async export(doc) {
+    const r = await WrapCompose.exportWrap(doc, car);
+    const v = await validate(new File([r.blob], r.name, { type: 'image/png' }), car);
+    const b64 = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result.split(',')[1]); fr.readAsDataURL(r.blob); });
+    return { name: r.name, bytes: r.bytes, w: r.w, h: r.h, reduced: r.reduced, colors: r.colors, steps: r.steps, template: r.template, rows: v.rows, b64 };
   },
   async setPaint(color) { paint = color; sendPaint(); pushTexture(); await sleep(400); },
   async camera(preset, settleMs = 1600) {

@@ -120,9 +120,21 @@ The existing **annotate** tool gets a **Send to chat** button: the user circles 
 - Key stored in `localStorage` only if the user ticks "remember on this device"; otherwise memory only. A plain note in the UI: the key goes from your browser to the provider and nowhere else.
 - Each render round sends a few images (roughly a few thousand input tokens). Show a running token count per conversation so users aren't surprised.
 
+## Status
+
+**Step 1 done** (`compose.js`, wired into `index.html` as `WrapCheck.preview(doc)` / `WrapCheck.export(doc)`):
+
+- Loads the dropdown car's template from Tesla's repo (cached, SHA-256 fingerprinted).
+- Composes `base` + `canvas` layers at the template's own size. Output alpha = template alpha × art alpha: a fully painted panel keeps the template's alpha byte for byte (verified on all 9 cars, 0 differing pixels after a decode round trip), and anything the design leaves transparent shows the car's paint.
+- Its own PNG encoder (a canvas premultiplies and rounds, so it can't write exact bytes): adaptive row filters + the browser's deflate.
+- `fit_size` ported: lossless first, then 256 → 4 colors, most frequent exact colors kept exact, no dither. Per-pixel noise on every car (1.2–1.75 MB lossless) came in under 1,000,000 bytes at 16–192 colors in 2–6 s; ordinary designs are 30–125 KB and never reach the ladder.
+- File names: accents dropped, other characters become word breaks, words joined with `_`, cut at a word boundary to 30.
+- Validator: warns between 1,000,000 and 1,048,576 bytes; "artwork outside the panels" now means outside the template's alpha (it used to count art on the template's seam lines, which are on the car).
+- Raster art goes in as `<image href="data:…">` inside a layer (SVG drawn as an image can't load external URLs).
+
 ## Build order
 
-1. Template loader for the dropdown car + export pipeline (JS port of `fit_size`, 1 MB) + canvas-only layers, working for every car, tested by hand with no model.
+1. ~~Template loader for the dropdown car + export pipeline (JS port of `fit_size`, 1 MB) + canvas-only layers, working for every car, tested by hand with no model.~~ Done.
 2. Auto-calibration → surface tables for every car; surface compiler.
 3. Chat panel + Anthropic adapter + `get_car` / `set_design` / `edit_design` / `render` / `finish`.
 4. Annotate → Send to chat.

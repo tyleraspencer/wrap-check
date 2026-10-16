@@ -37,7 +37,7 @@ print('pack verified', got, flush=True)
 shutil.rmtree(out, ignore_errors=True)
 os.makedirs(os.path.join(out, 'godot'))
 subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'build_packs.py'), pck, os.path.join(out, 'godot', 'packs')], check=True)
-for f in ('index.html', 'icon.svg', 'icon-192.png', 'apple-touch-icon.png'):
+for f in ('index.html', 'compose.js', 'icon.svg', 'icon-192.png', 'apple-touch-icon.png'):
     shutil.copy(os.path.join(ROOT, f), out)
 for f in ('index.html', 'index.js', 'index.wasm', 'index.png'):
     shutil.copy(os.path.join(ROOT, 'godot', f), os.path.join(out, 'godot', f))
