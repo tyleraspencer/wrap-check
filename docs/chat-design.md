@@ -92,34 +92,50 @@ The key design choice: **the model does not paint the raw template atlas.** That
 
 ## Tools
 
+The model works on two things with equal weight: **the exact PNG it would deliver** (the artifact the user uploads) and **the 3D car** (the best way to see whether the PNG is right).
+
 | Tool | Returns | Notes |
 |---|---|---|
-| `get_car()` | The dropdown's current car: id, name, template size, and its views, each with its size, a sentence on what it looks at and which way the front is, and its guide image | Called at the start and again whenever the user switches cars (the app injects a "car changed" note). |
-| `set_design(doc)` | Text only: compile errors, a cheap validation summary (coverage, any art clipped at a surface edge) | Full replace. |
-| `edit_design(ops)` | Same | JSON-patch on layers, so small fixes cost few tokens. |
-| `render(views, paint?)` | Screenshots | Default `three_quarter`, `rear_right`, `top`: together they show both sides, the hood, roof and trunk. Close-ups (`focus: "trunk"`, `"mirror_left"`…) for checking text and logos. Sent at about 1024 px wide JPEG to keep image tokens down. |
-| `search_web(query)` / `fetch(url)` | Text | For themed requests. Use the provider's built-in web search where it exists (Anthropic `web_search`; OpenAI Responses `web_search`). Browser `fetch` of logo files usually fails on CORS, so the UI also offers **"attach a logo"** and the model asks for it when it can't fetch one. |
-| `generate_image(prompt)` | asset id | Optional, OpenAI keys only (`gpt-image`). Interior artwork only; masking keeps its silhouette from mattering. |
-| `finish(summary)` | – | App runs the export pipeline and shows the PNG with a Download button. |
+| `get_car()` | The dropdown's car: id, name, template size, Tesla's rules; its views (size, what each camera looks at) with their guide images; Tesla's template; the panel map image and table | Called at the start and when the user switches cars (the app adds a "car changed" note). |
+| `study_car()` | A labelled texture on the 3D car (panel colours and IDs, an arrow to the car's up, "ABC 123" written the way the table says reads upright, a 64 px grid) from all 8 angles and from above, plus close-ups of the small panels | The skill's calibration photos, done through the real engine for any car. Cached in IndexedDB per car and template fingerprint. |
+| `set_design(doc)` / `edit_design(ops)` | The exact exported PNG (same pipeline as delivery), plus checks: Tesla's rules, coverage per panel, art drawn where its view doesn't paint or off the car, raster images that get enlarged | Also puts the design on the 3D car as a draft. `edit_design` ops: `patch_svg` (find/replace in one layer), `replace_layer`, `insert_layer`, `remove_layer`, `move_layer`, `set_base`, `set_name`. |
+| `inspect_png(panels \| box, zoom)` | An enlarged crop of the PNG, pixel for pixel, with panel outlines and IDs | The skill's "zoom in on text, logos and seams". |
+| `render(views?, focus?, angle?)` | Sharp photos (the engine enlarged up to 4096 px for the shot). `focus`: a close-up of those panels | Close-ups from a calibrated camera are cropped exactly from the calibration; from another `angle`, the panels are found by showing them white on black for a moment. |
+| `compare_view(view)` | The drawing beside the car seen from that view's own calibrated camera, and the car with blocks flagged where its edges are much softer than drawn (yellow) or in different places (red) | Edges, not colours, so lighting mostly cancels out. |
+| `finish(name?)` | Exports, puts the PNG in the wrap input on the left (preview, Tesla checks, download, share) and shows it in the chat | |
+| `web_search` | Anthropic's server tool (`web_search_20260209`) | Dropped automatically if the account has it turned off. |
+
+Attachments (files, pasted images, annotations) get ids; images can be used as art with `<image href="att:3"/>` (`WrapCompose.setAsset`). The model sees a copy scaled to 1568 px; the art uses the full-resolution original, or the SVG itself.
 
 ## The loop
 
-1. **Ask only what's missing.** The car comes from the dropdown, so never ask which car. If the request is clear, start.
-2. **Research** if themed.
-3. **`set_design`**, then **`render`** the default three views and look.
-4. **Fix and re-render** only the views that changed. Budget: up to 3 self-correction rounds, then show the user where it stands and ask.
-5. **`finish`** → export: compile at the selected car's template size, composite through that template's alpha, run the color ladder until under 1,000,000 bytes, sanitize the name, run `WrapCheck.validate`, show the file. The final message is one or two sentences about the design; no byte counts or panel counts (kept from the skill's delivery rule).
+1. **Ask only what's missing.** The car comes from the dropdown, so never ask which car.
+2. `get_car`, then `study_car` before placing anything directional. **Research** if themed.
+3. `set_design`, look at **the PNG first** (and `inspect_png` on text, logos and seams), fix the file, then `render` the default views, `render` with `focus` on every panel with text, a logo or a seam crossing, and `compare_view` each car-view layer.
+4. Up to 3 self-correction rounds, then show the user where it stands and ask.
+5. `finish`, then one or two sentences about the design (no byte or panel counts).
+
+## The panel map: the skill's per-car knowledge, computed for every car
+
+`tesla-wrap-skill` hand-wrote, for the Model Y 2025 Premium only, which way each panel faces on the car (`panel-orientation.md`), its ground edges (`ground-edge-reference.png`) and which panels meet (`seam-adjacency.md`). `WrapCompose.panelMap(carId)` works the same facts out from the calibration for every car:
+
+- **Who paints it:** the share of each panel each view owns, and how much no camera sees.
+- **Orientation**, per view that paints a fair share of the panel: an affine fit from template to screen gives the canvas directions of the car's up, front and left, the ground-facing edge, the rotation that makes canvas text read upright (and, seen from above, from in front of or behind the car), and a warning where a panel looks mirrored or is seen nearly edge-on.
+- **Orientation that turns across a panel** (big panels that wrap several faces, like most of the Cybertruck) is flagged; the panel map image draws small local arrows every 96 px.
+- **Neighbours:** panels whose cells sit next to each other on screen, with the canvas points where their edges meet. Seen in only one view, a pair may just overlap on screen, so the model confirms with `study_car`.
+
+Checked against the skill on the Model Y 2025 Premium: the bumper is upside down relative to the hood, canvas-up points to the front on the sides, upright text on the canvas-left doors is rotated about 90° clockwise and on the right about 90° counter-clockwise, the trunk is upright, the rear bumper corners' ground edges face outward, and 7|11, 8|12, 11|13, 3|7, 5→15, 6→16, 13|18 and 18|20 are found as neighbours.
 
 ## User feedback channel
 
-The existing **annotate** tool gets a **Send to chat** button: the user circles a problem on the frozen frame and it arrives as an image message ("move this up", with the circle). This replaces describing problems in words, which was the slowest part of iterating with the skill.
+Annotations are picked up automatically. While the user draws, the composer shows a live "Annotation on the car" chip; sending (or leaving annotate mode) attaches the frozen frame with the marks and a note naming the angle and saying the marks aren't part of the wrap. Files can be attached with the paperclip, pasted, or dropped on the chat.
 
 ## Keys, providers, cost
 
-- **Anthropic first.** Browser calls need the `anthropic-dangerous-direct-browser-access: true` header. Use prompt caching on the system prompt + `get_car` result. Default to a Sonnet-tier model; let the user pick.
-- **OpenAI second**, via the Responses API (also callable from the browser). One adapter interface: messages in, tool calls out.
-- Key stored in `localStorage` only if the user ticks "remember on this device"; otherwise memory only. A plain note in the UI: the key goes from your browser to the provider and nowhere else.
-- Each render round sends a few images (roughly a few thousand input tokens). Show a running token count per conversation so users aren't surprised.
+- **Anthropic.** Browser calls with `anthropic-dangerous-direct-browser-access: true`. Claude Opus 5.5 by default (Sonnet 5.5 and Haiku 5.5 in the picker), adaptive thinking with summaries shown, `fallbacks: "default"` (dropped automatically if refused), automatic prompt caching, streaming with `eager_input_streaming` and client-side validation of tool inputs. The history is only ever appended to, as preserved thinking requires.
+- Key stored in `localStorage` only if the user ticks "Remember on this device"; otherwise memory only. The UI says the key goes from the browser to Anthropic and nowhere else, and explains how to get one.
+- A running cost estimate per conversation, from the token counts Anthropic reports.
+- OpenAI is not done.
 
 ## Status
 
@@ -141,13 +157,15 @@ The existing **annotate** tool gets a **Send to chat** button: the user circles 
 - Known artifact: thin slivers the front or rear camera barely sees can pick up that view's art at their edges (seen at the Model Y L tailgate).
 - Recalibrate with `node tools/calibrate.mjs [car ...]` when Tesla changes a template (the fingerprint check catches it) or a pack changes.
 
+**Steps 3–5 done** (`chat.js`; panel map, study texture, close-ups and checks in `compose.js`; capture hooks in `index.html`). Car-view warping now averages 2 × 2 samples per template pixel where the view is finer than the template (most of it: about 2.8 screen pixels per template pixel on the Model Y's sides), and reads a larger rasterization where a panel is seen at a glancing angle. Tested end to end against a stand-in engine and a mocked API; not yet against the real engine with a real key.
+
 ## Build order
 
 1. ~~Template loader for the dropdown car + export pipeline (JS port of `fit_size`, 1 MB) + canvas-only layers, working for every car, tested by hand with no model.~~ Done.
 2. ~~Auto-calibration → car views for every car; view compiler.~~ Done.
-3. Chat panel + Anthropic adapter + `get_car` / `set_design` / `edit_design` / `render` / `finish`.
-4. Annotate → Send to chat.
-5. Web search, logo attach.
+3. ~~Chat panel + Anthropic adapter + `get_car` / `set_design` / `edit_design` / `render` / `finish`.~~ Done, plus `study_car`, `inspect_png`, `compare_view` and the computed panel map.
+4. ~~Annotate → chat.~~ Done (automatic).
+5. ~~Web search, logo attach.~~ Done.
 6. OpenAI adapter, image generation.
 
 ## Open questions
