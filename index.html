@@ -16,8 +16,9 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  .app { display: grid; grid-template-columns: 1fr 340px; height: 100%; }
-  aside { order: 2; background: var(--panel); border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; }
+  .app { display: grid; grid-template-columns: 340px 1fr var(--chat-w, 400px); height: 100%; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 16px; overflow-y: auto; }
+  .chat-min { --chat-w: 46px; }
   h1 { font-size: 16px; margin: 0 0 14px; letter-spacing: .2px; }
   h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); margin: 20px 0 8px; font-weight: 600; }
   .bar button { background: #232327; color: var(--text); border: 1px solid var(--line);
@@ -63,7 +64,11 @@
   .track { width: 220px; height: 4px; background: #2c2c31; border-radius: 2px; overflow: hidden; }
   #fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .hint { color: var(--dim); font-size: 12px; margin-top: 6px; }
-  .embed .app { grid-template-columns: 1fr; } .embed aside, .embed .bar { display: none; }
+  .embed .app { grid-template-columns: 1fr; } .embed aside, .embed .bar, .embed #chat, .embed #chatFab { display: none; }
+  /* the chat (chat.js) checks its work on the car: while it does, a still of the car covers the engine, which it resizes for sharp shots */
+  #agentCover { position: absolute; inset: 0; z-index: 9; background: #1a1a1c center/contain no-repeat; display: none; } #agentCover.on { display: block; }
+  #agentCover span, #draftChip { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(26,26,29,.92); border: 1px solid var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 12px; white-space: nowrap; }
+  #draftChip { z-index: 3; pointer-events: none; } #draftChip[hidden] { display: none; } .marking #draftChip { display: none; }
   /* ---- annotate: dock (button + icon card), color flyout ---- */
   :root { --ctl-h: 50px; --btn: 40px; --card-w: calc(var(--btn) + 16px); --dock-left: 12px; --bar-bottom: 16px; }
   .bar::-webkit-scrollbar { display: none; }
@@ -167,10 +172,15 @@
         <button class="tool" id="mkShare" data-tip="Share image" aria-label="Share image" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
     </div>
     <div class="bar" id="bar"></div>
+    <div id="draftChip" hidden></div>
+    <div id="agentCover"><span>Claude is looking at the car…</span></div>
   </main>
+  <section id="chat" aria-label="Design with Claude"></section>
 </div>
+<button id="chatFab" aria-label="Design with Claude">Design with Claude</button>
 
 <script src="compose.js"></script>
+<script src="chat.js" defer></script>
 <script>
 const RAW = 'https://raw.githubusercontent.com/teslamotors/custom-wraps/master';
 // Address of the Wrap Check share service (share/worker.js on Cloudflare). Empty = sharing falls back to links that carry the image.
@@ -296,17 +306,20 @@ function pushTexture() {
 const LUT = Array.from({ length: 256 }, (_, v) => Math.min(255, Math.round(255 * 1.3 * Math.pow(v / 255, 1 / 0.6))));
 
 // ---- wrap → 1024×1024 texture (matches the car's UV map) ----
-function setWrap(img) {
+function engineTex(img, keep) {          // color-corrected for the engine; keep: also return the uncorrected one
   const c = document.createElement('canvas'); c.width = c.height = 1024;
   const x = c.getContext('2d');
   x.drawImage(img, 0, 0, 1024, 1024);
-  rawTex = c.toDataURL('image/png');
+  const raw = keep ? c.toDataURL('image/png') : null;
   const im = x.getImageData(0, 0, 1024, 1024), p = im.data;
   for (let i = 0; i < p.length; i += 4) if (p[i + 3]) {
     p[i] = LUT[p[i]]; p[i + 1] = LUT[p[i + 1]]; p[i + 2] = LUT[p[i + 2]];
   }
   x.putImageData(im, 0, 0);
-  fixedTex = c.toDataURL('image/png');
+  return { raw, fixed: c.toDataURL('image/png') };
+}
+function setWrap(img) {
+  const t = engineTex(img, true); rawTex = t.raw; fixedTex = t.fixed;
   texture = fixedTex;                    // always color-corrected for the engine
   pushTexture(); mkRefresh();
 }
@@ -374,7 +387,7 @@ async function handleFile(file, exampleBtn = null) {         // exampleBtn: the 
   if (exampleBtn) { $('checks').innerHTML = ''; $('verdict').textContent = ''; }       // Tesla's own files: no summary
   else showChecks(rows);
   if (img) {
-    setWrap(img);
+    setWrap(img); $('draftChip').hidden = true;
     currentShare = exampleBtn ? { example: exampleBtn.dataset.n } : { file }; showShare();
     if (exampleBtn) {                                          // the highlighted thumbnail is the picture; no big preview
       $('preview').hidden = true; $('drop').firstElementChild.textContent = dropText(false); currentShare = null; showShare();
@@ -564,7 +577,11 @@ function mkDrawSel(c) {
   else { const b = h.b, pad = 6 * u; c.save(); c.translate(b.cx, b.cy); c.rotate(b.rot); c.strokeRect(-b.w / 2 - pad, -b.h / 2 - pad, b.w + 2 * pad, b.h + 2 * pad); c.setLineDash([]); c.beginPath(); c.moveTo(0, -b.h / 2 - pad); c.lineTo(0, -b.h / 2 - 34 * u); c.stroke(); c.restore(); dot(h.rot); c.setLineDash([]); for (const k in h.hs) { c.beginPath(); c.rect(h.hs[k][0] - 6 * u, h.hs[k][1] - 6 * u, 12 * u, 12 * u); c.fill(); c.stroke(); } }
   c.restore();
 }
+let mkNote = '';                                                   // tell the chat when marks appear or go (chat.js picks annotations up)
+const mkNotify = () => { const k = (mk.on ? 1 : 0) + ':' + mk.shapes.length; if (k === mkNote) return; mkNote = k; dispatchEvent(new CustomEvent('wrapcheck:markup', { detail: { on: mk.on, count: mk.shapes.length, view: viewLabel() } })); };
+const viewLabel = () => currentView === 'rotate' ? 'a rotating view' : currentView && !viewDirty ? (VIEWS[currentView] || {}).label || currentView : viewDirty ? 'an angle dragged by hand' : 'the starting angle';
 function mkRedraw() {
+  setTimeout(mkNotify, 0);
   const t = mkRect(), c = mkCtx; c.clearRect(0, 0, mkCanvas.width, mkCanvas.height); c.imageSmoothingQuality = 'high';
   const put = im => { const g = mkGeom(im); c.drawImage(im, t.x + g.u0 * t.w, t.y + g.v0 * t.h, g.du * t.w, g.dv * t.h); }, gi = mkGeom(mk.img);
   if (mk.img) { if (mk.fade) { put(mk.fade.from); c.globalAlpha = mk.fade.a; } put(mk.img); c.globalAlpha = 1; }       // the frozen picture (crossfading from the previous one), then the marks, both inside the same rectangle
@@ -667,9 +684,11 @@ async function startMarkup() {                               // freeze instantly
   $('mkShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([], 'a.png', { type: 'image/png' })] }));
 }
 function stopMarkup() {
-  const wasOn = mk.on; mkCloseFly(); mkCommitText(); mk.on = false; mk.ready = false; mk.live = null; mk.drag = null; mk.sel = null; mk.rt++; mk.fade = null; mk.gest = mk.pan = null; mk.pts.clear();
+  const wasOn = mk.on; mkCloseFly(); mkCommitText();
+  if (wasOn && mk.shapes.length && mk.img) dispatchEvent(new CustomEvent('wrapcheck:annotation', { detail: { blob: mkRender(), count: mk.shapes.length, view: viewLabel() } }));     // drawn now, before the picture goes
+  mk.on = false; mk.ready = false; mk.live = null; mk.drag = null; mk.sel = null; mk.rt++; mk.fade = null; mk.gest = mk.pan = null; mk.pts.clear();
   document.body.classList.remove('marking'); $('mkPanel').hidden = true; $('mkFn').hidden = true; setMarkBtn(false); $('mkChip').hidden = true;
-  if (!wasOn) return; mkResumeSpin(true);
+  setTimeout(mkNotify, 0); if (!wasOn) return; mkResumeSpin(true);
   // The engine is still sized for the sharper capture. Keep the frozen picture up while it returns to normal and draws real frames, then fade it out.
   document.body.classList.add('leaving'); frame.style.cssText = ''; nudgeSoon(); const lv = ++mk.lv;
   mk.leaving = new Promise(done => {
@@ -855,6 +874,7 @@ function switchCar(id) {
   $('checks').innerHTML = ''; $('verdict').textContent = ''; texture = null; rawTex = fixedTex = null;
   $('preview').hidden = true; $('drop').firstElementChild.textContent = dropText(false);
   if (packOf(car) !== loadedPack) loadViewer(); else syncCar();
+  $('draftChip').hidden = true; dispatchEvent(new CustomEvent('wrapcheck:car', { detail: { car } }));
 }
 function renderExamples() {
   $('examples').innerHTML = examplesFor(car).map(n => `<button data-n="${n}" title="${n.replace(/_/g, ' ')}"><img loading="lazy" src="${RAW}/${car}/example/${n}.png"><span>${n.replace(/_/g, ' ')}</span></button>`).join('');
@@ -895,6 +915,74 @@ fetch('godot/packs/manifest.json').then(r => r.json()).catch(() => ({})).then(as
   else if (P.get('wrap')) fetch(P.get('wrap')).then(r => r.blob()).then(b => handleFile(new File([b], (P.get('wrap').split('/').pop() || 'wrap.png').split('?')[0], { type: 'image/png' }))).catch(() => {});
 });
 
+// ---- the car as a checking tool for the chat (chat.js) ----
+// The chat photographs the car sharply (the engine is enlarged for a moment, as for annotate's sharp pictures), finds panels on
+// screen from any angle, and puts labelled textures on the car, without changing the wrap the user has loaded. Meanwhile a still of
+// the car covers the engine, so nothing jumps around, and the camera goes back to the user's angle afterwards.
+const agent = { depth: 0, ratio: 1 };
+const blankTex = (() => { let u = null; return () => u ??= (() => { const c = document.createElement('canvas'); c.width = c.height = 1024; return c.toDataURL('image/png'); })(); })();
+async function agentBegin(note) {
+  if (!carLoaded) throw new Error('The 3D car has not loaded yet.');
+  if (mk.on) stopMarkup();                                  // the marks already went to the chat with the annotation event
+  if (mk.leaving) await mk.leaving;
+  if (agent.depth++ === 0) {
+    const c = await captureCarCopy(), cov = $('agentCover');
+    cov.style.backgroundImage = c ? `url(${c.toDataURL('image/jpeg', 0.85)})` : 'none'; cov.classList.add('on');
+    const cv = mkEngine(), fr = frame.getBoundingClientRect(); agent.ratio = cv && fr.width ? cv.width / fr.width : 1;
+    agent.view = currentView; agent.dirty = viewDirty; agent.spin = spinning;
+    if (spinning) { spinning = false; $('spin').classList.remove('on'); send({ type: 'set_camera_auto_rotate', enabled: false }); }
+  }
+  $('agentCover').firstElementChild.textContent = note || 'Claude is looking at the car…';
+}
+async function agentEnd() {
+  if (agent.depth === 0 || --agent.depth > 0) return;
+  frame.style.cssText = ''; nudgeSoon(); send({ type: 'set_texture', texture: texture || blankTex() });
+  if (agent.spin) { spinning = true; $('spin').classList.add('on'); send({ type: 'set_camera_auto_rotate', enabled: true }); }
+  else if (agent.view && agent.view !== 'rotate' && !agent.dirty) { const v = VIEWS[agent.view]; send(v.preset ? { type: 'set_camera_preset', preset: v.preset } : { type: 'set_camera_angle', horizontal: v.h, vertical: 15, distance: fitDistance() }); }
+  await sleep(700); $('agentCover').classList.remove('on');
+}
+function agentCamera(cam) {                                 // a VIEWS name, or { horizontal, vertical, distance }
+  if (typeof cam === 'string') { const v = VIEWS[cam]; if (!v) throw new Error('unknown view ' + cam); cam = v.preset ? { preset: v.preset } : { horizontal: v.h, vertical: 15, distance: fitDistance() }; }
+  send(cam.preset ? { type: 'set_camera_preset', preset: cam.preset } : { type: 'set_camera_angle', horizontal: cam.horizontal, vertical: cam.vertical ?? 15, distance: cam.distance ?? fitDistance() });
+  return sleep(900);                                        // then shots wait for two matching frames
+}
+async function agentSize(w, h) {                            // the engine at w × h CSS pixels, scaled to fit where it sits
+  const host = frame.parentElement.getBoundingClientRect(), k = Math.min(1, host.width / w, host.height / h), cv = mkEngine();
+  frame.style.cssText = `inset:auto;left:0;top:0;width:${w}px;height:${h}px;transform:scale(${k});transform-origin:0 0`; nudgeSoon();
+  const want = w * agent.ratio, t0 = Date.now();
+  while (cv && Math.abs(cv.width - want) > want * 0.05 && Date.now() - t0 < 3000) await sleep(100);
+  await sleep(250);
+}
+// A sharp photo: S × the viewer's size (capped at 4096 device pixels a side), or exactly `device` = [w, h] device pixels.
+async function agentShot({ S = 2, device } = {}) {
+  const host = frame.parentElement.getBoundingClientRect(), r = agent.ratio || 1;
+  if (device) await agentSize(device[0] / r, device[1] / r);
+  else { const k = Math.max(1, Math.min(S, 4096 / (host.width * r), 4096 / (host.height * r))); await agentSize(host.width * k, host.height * k); }
+  const c = await captureSettled(); if (!c) throw new Error('Could not photograph the car in this browser.'); return c;
+}
+async function agentShow(url) {                             // put a texture on the car; resolves once the engine is showing it
+  const sig = async () => { const c = await captureCarCopy(); return c && mkSig(c); }, before = await sig(), t0 = Date.now();
+  send({ type: 'set_texture', texture: url }); let seen = null;
+  while (Date.now() - t0 < 12000) {
+    const g = await sig(); if (!g) { await sleep(50); continue; }
+    if (!seen) { if ((before && mkSigDiff(before, g) > 0.6) || Date.now() - t0 > 3000) seen = g; continue; }
+    if (mkSigDiff(seen, g) < 0.1) return; seen = g;
+  }
+}
+// Where panels are on screen right now: white on them and black elsewhere, minus all black, so lighting cancels out.
+async function agentLocate(ids) {
+  const on = await WrapCompose.panelTexture(car, ids), off = await WrapCompose.panelTexture(car, []);
+  const toUrl = async c => { const d = document.createElement('canvas'); d.width = c.width; d.height = c.height; d.getContext('2d').drawImage(c, 0, 0); return d.toDataURL('image/png'); };
+  await agentShow(await toUrl(on)); const a = await captureSettled();
+  await agentShow(await toUrl(off)); const b = await captureSettled();
+  send({ type: 'set_texture', texture: texture || blankTex() });
+  if (!a || !b || a.width !== b.width) return null;
+  const da = a.getContext('2d').getImageData(0, 0, a.width, a.height).data, db = b.getContext('2d').getImageData(0, 0, b.width, b.height).data;
+  let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, n = 0;
+  for (let y = 0; y < a.height; y += 2) for (let x = 0; x < a.width; x += 2) { const i = (y * a.width + x) * 4; if (da[i] + da[i + 1] + da[i + 2] - db[i] - db[i + 1] - db[i + 2] > 90) { n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+  return n < 20 ? null : { box: [x0, y0, x1 + 2, y1 + 2], w: a.width, h: a.height, pixels: n * 4 };
+}
+
 // ---- scripting API: used by the headless renderer / MCP server, and handy in the console ----
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const waitFor = async (pred, ms, what) => { const t0 = Date.now(); while (!pred()) { if (Date.now() - t0 > ms) throw new Error('timed out waiting for ' + what); await sleep(100); } };
@@ -929,6 +1017,14 @@ window.WrapCheck = {
     return { name: r.name, bytes: r.bytes, w: r.w, h: r.h, reduced: r.reduced, colors: r.colors, steps: r.steps, template: r.template, rows: v.rows, b64 };
   },
   async setPaint(color) { paint = color; sendPaint(); pushTexture(); await sleep(400); },
+  // For the chat (chat.js): load a finished wrap into the wrap input; the current annotation; the car as a checking tool.
+  loadWrapFile: file => handleFile(file),
+  draft(label) { $('draftChip').textContent = label; $('draftChip').hidden = !label; },
+  async annotation() { if (!mk.on || !mk.shapes.length || !mk.img) return null; return { blob: await mkRender(), count: mk.shapes.length, view: viewLabel() }; },
+  closeAnnotate() { if (mk.on) stopMarkup(); },
+  carName: id => carName(id || car),
+  views: () => BAR.slice(),
+  agent: { begin: agentBegin, end: agentEnd, camera: agentCamera, shot: agentShot, show: agentShow, locate: agentLocate, texture: img => engineTex(img).fixed },
   async camera(preset, settleMs = 1600) {
     spinning = false; viewDirty = false; send({ type: 'set_camera_auto_rotate', enabled: false });
     const v = VIEWS[preset] || VIEWS.three_quarter;

@@ -27,6 +27,13 @@ Click the **annotate** icon (bottom-left, level with the angle bar; the bar scro
 Drawing tools down the left, top to bottom: **Pen** (selected by default), **Box**, **Circle**, **Arrow**, **Text**, the current color (click it for the other four, which fan out to the right), and **Move, rotate & resize**. Along the bottom, where the angle bar normally sits: **Zoom in / out**, Undo, Clear, **Copy image** (paste it into an LLM chat), **Download**, and **Share** (phones). Hover (or long-press on a phone) for a tooltip.
 Every shape except pen strokes can be moved, rotated and resized: a new shape is selected as soon as you draw it, so drag its body to move it, the round handle to rotate it (snaps to 15 degrees), and the square handles to resize it (Shift on a corner keeps the proportions; text scales); arrows have draggable ends. The freeze is instant, then the picture quietly upgrades to a 2–3× sharper capture of the same frame, so zooming in stays crisp. Scroll or pinch to zoom the frozen picture (out to 30% as well as in). If the car runs off the side of the screen when you freeze, the picture is re-captured from a wider view in the background, so zooming out shows the whole car (marks you draw beyond the original frame are kept in the saved image) and drag it with the Move tool (or two fingers) to pan; `+`, `-` and `0` also work. The picture is never stretched, however you resize the window, and if you change the wrap while frozen it is re-photographed with the new wrap and your marks stay put. With the Move tool, click any shape to select it. **Delete** removes the selected shape, **Esc** deselects, and Undo reverses edits. Everything is made in your browser; nothing is uploaded.
 
+## Design with Claude
+
+The chat on the right designs a wrap from a description, for whichever car is selected. It uses **your own Anthropic API key** (it explains how to get one), sent from your browser straight to Anthropic, so you pay Anthropic directly and nothing runs on a server of ours.
+Claude checks the exact PNG it would deliver and the 3D car as it goes: sharp renders, close-ups of panels with text or logos, and its drawings compared with the car from the same camera. When both look right, the finished file goes into the wrap input on the left.
+Attach images and logos with the paperclip, paste them, or drop them on the chat. Anything you draw with the annotate tool is sent with your next message. On phones the chat opens from the **Design with Claude** button.
+How it works: [docs/chat-design.md](docs/chat-design.md).
+
 ## URL options
 
 | Parameter | Example | What it does |
