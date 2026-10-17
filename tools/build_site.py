@@ -42,6 +42,13 @@ for f in ('index.html', 'compose.js', 'chat.js', 'icon.svg', 'icon-192.png', 'ap
 for f in ('index.html', 'index.js', 'index.wasm', 'index.png'):
     shutil.copy(os.path.join(ROOT, 'godot', f), os.path.join(out, 'godot', f))
 shutil.copytree(os.path.join(ROOT, 'calib'), os.path.join(out, 'calib'))     # car-view calibration (tools/calibrate.mjs)
+# Version the scripts by content, so a browser or CDN can never pair a new index.html or chat.js with an old compose.js.
+page = open(os.path.join(out, 'index.html'), encoding='utf-8').read()
+for f in ('compose.js', 'chat.js'):
+    tag = f'src="{f}"'
+    if tag not in page: sys.exit(f'index.html has no {tag}; update the cache-busting step in tools/build_site.py')
+    page = page.replace(tag, f'src="{f}?v={hashlib.sha256(open(os.path.join(out, f), "rb").read()).hexdigest()[:10]}"')
+open(os.path.join(out, 'index.html'), 'w', encoding='utf-8').write(page)
 open(os.path.join(out, '.nojekyll'), 'w').close()
 total = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(out) for f in fs)
 print(f'site ready in {out}: {total / 1e6:.0f} MB')

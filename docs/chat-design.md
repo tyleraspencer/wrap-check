@@ -159,6 +159,8 @@ Annotations are picked up automatically. While the user draws, the composer show
 
 **Steps 3–5 done** (`chat.js`; panel map, study texture, close-ups and checks in `compose.js`; capture hooks in `index.html`). Car-view warping now averages 2 × 2 samples per template pixel where the view is finer than the template (most of it: about 2.8 screen pixels per template pixel on the Model Y's sides), and reads a larger rasterization where a panel is seen at a glancing angle. Tested end to end against a stand-in engine and a mocked API; not yet against the real engine with a real key.
 
+First live run: the browser paired the new `chat.js` with a cached old `compose.js`, so every car tool failed. `tools/build_site.py` now versions both script URLs by content hash, and the chat refuses to start (asking for a reload) if the `compose.js` it gets lacks what it needs.
+
 ## Build order
 
 1. ~~Template loader for the dropdown car + export pipeline (JS port of `fit_size`, 1 MB) + canvas-only layers, working for every car, tested by hand with no model.~~ Done.
