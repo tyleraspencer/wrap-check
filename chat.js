@@ -51,6 +51,7 @@ The PNG is the product: the user uploads exactly that file to their car. Its qua
 3. render with focus on every panel that has text, a logo or a seam crossing, and look at the close-up at full resolution: letters upright and not mirrored, edges sharp, nothing stretched, warped or cut.
 4. compare_view for each car-view layer you used. It puts your drawing next to the car seen from that camera and marks where edges came out soft or displaced. Fix what it flags, unless you can see it's lighting or a reflection.
 Iterate up to 3 rounds on your own. If it still isn't right, show the user where it stands and ask. Never call finish with a defect you know about.
+If a tool fails with the same error twice, stop and tell the user what failed; don't keep retrying it.
 
 # Judgement
 - Ask only what's missing. If the request is clear, start.
@@ -86,7 +87,7 @@ Keep messages short; the user is watching the car. Between steps, say in a few w
     { name: 'finish', description: 'Deliver: export the current design, put the PNG in the page\'s wrap input (preview, Tesla checks, download and share) and show it in the chat. Only when the PNG and the car both look right.', input_schema: { type: 'object', properties: { name: { type: 'string', description: 'File name without .png' } }, additionalProperties: false } },
   ];
   for (const t of TOOLS) t.eager_input_streaming = true;
-  const tools = () => S.noSearch ? TOOLS : [...TOOLS, { type: 'web_search_20260209', name: 'web_search', max_uses: 6 }];
+  const tools = () => S.noSearch ? TOOLS : [...TOOLS, { type: 'web_search_20260209', name: 'web_search', max_uses: 4 }];
   const modelInfo = () => MODELS.find(m => m.id === S.model) || MODELS[0];
 
   // ---------------------------------------------------------------- UI
@@ -658,5 +659,11 @@ Keep messages short; the user is watching the car. Between steps, say in a few w
   }
 
   // ---------------------------------------------------------------- start
-  if (S.key) hello(); else keyScreen();
+  // A cached older compose.js (or index.html) can't run these tools; say so instead of letting Claude retry them.
+  const stale = !window.WrapCheck || !WrapCheck.agent || ['panelMap', 'studyTexture', 'inspect', 'setAsset'].some(f => typeof (window.WrapCompose || {})[f] !== 'function');
+  if (stale) {
+    $('chCompose').hidden = true;
+    body.innerHTML = '<div class="ch-key"><p><b>This page is partly out of date.</b> Your browser is using an older copy of part of it, so the designer can\'t run. Reload the page to use it.</p><button class="ch-primary" id="chReload">Reload</button></div>';
+    $('chReload').onclick = () => location.reload();
+  } else if (S.key) hello(); else keyScreen();
 })();
